@@ -1,0 +1,6 @@
+{
+  "name": "Music Video Social Clipper",
+  "description": "Convert music videos into 5 engaging 15-second social media clips with optimal framing and AI-generated social captions.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
