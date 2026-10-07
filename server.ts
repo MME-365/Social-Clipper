@@ -583,6 +583,108 @@ Return the result strictly in JSON matching the specified schema format.`;
   }
 });
 
+// Endpoint to upload user video for high-speed FFmpeg 9:16 processing
+app.post("/api/upload-video", express.raw({ type: "video/*", limit: "250mb" }), (req, res) => {
+  try {
+    const filePath = path.join(DOWNLOADS_DIR, "user_video.mp4");
+    fs.writeFileSync(filePath, req.body);
+    res.json({ success: true, url: "/downloads/user_video.mp4" });
+  } catch (err: any) {
+    console.error("Video upload error:", err);
+    res.status(500).json({ error: "Failed to save video on server" });
+  }
+});
+
+import { saasDb } from "./server_saas.js";
+
+// Endpoint to render 9:16 video clips or full video using FFmpeg
+app.post("/api/render-clip-ffmpeg", async (req, res) => {
+  try {
+    const { startTime, endTime, panOffset = 0, filename = "clip_9x16.mp4" } = req.body;
+    
+    // Prefer user uploaded video if present, otherwise sample video
+    const userVideo = path.join(DOWNLOADS_DIR, "user_video.mp4");
+    const sampleVideo = path.join(DOWNLOADS_DIR, "sample_music_video.mp4");
+    const sourceVideo = fs.existsSync(userVideo) ? userVideo : sampleVideo;
+
+    if (!fs.existsSync(sourceVideo)) {
+      return res.status(404).json({ error: "Source video not ready on server" });
+    }
+
+    const cleanName = `${Date.now()}_${filename.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+    const outputPath = path.join(DOWNLOADS_DIR, cleanName);
+
+    let timeArgs = "";
+    if (typeof startTime === "number" && typeof endTime === "number" && endTime > startTime) {
+      timeArgs = `-ss ${startTime} -to ${endTime}`;
+    }
+
+    const cropFilter = `crop=ih*9/16:ih:min(max(0\\,(iw-ih*9/16)/2+(${panOffset}/100)*(iw-ih*9/16))\\,iw-ih*9/16):0`;
+    const cmd = `ffmpeg -y ${timeArgs} -i "${sourceVideo}" -vf "${cropFilter}" -c:v libx264 -preset ultrafast -pix_fmt yuv420p -c:a aac "${outputPath}"`;
+    await execPromise(cmd);
+
+    res.json({
+      success: true,
+      url: `/downloads/${cleanName}`,
+      filename: cleanName
+    });
+  } catch (err: any) {
+    console.error("FFmpeg render error:", err);
+    res.status(500).json({ error: err.message || "Failed to render 9:16 video" });
+  }
+});
+
+// SaaS API Endpoints
+app.get("/api/saas/config", (req, res) => {
+  res.json(saasDb.getConfig());
+});
+
+app.post("/api/saas/config", (req, res) => {
+  const updated = saasDb.updateConfig(req.body);
+  res.json({ success: true, config: updated });
+});
+
+app.get("/api/saas/user", (req, res) => {
+  const email = (req.query.email as string) || "demo@user.com";
+  res.json(saasDb.getUser(email));
+});
+
+app.post("/api/saas/track-download", (req, res) => {
+  const { email = "demo@user.com", isBatch = false } = req.body;
+  const result = saasDb.trackDownload(email, isBatch);
+  if (!result.allowed) {
+    return res.status(403).json(result);
+  }
+  res.json(result);
+});
+
+app.post("/api/saas/upgrade", (req, res) => {
+  const { email = "demo@user.com", plan = "creator", paypalOrderId } = req.body;
+  if (plan !== "creator" && plan !== "enterprise") {
+    return res.status(400).json({ error: "Invalid plan" });
+  }
+  const tx = saasDb.recordTransaction(email, plan, paypalOrderId);
+  const updatedUser = saasDb.getUser(email);
+  res.json({ success: true, transaction: tx, user: updatedUser });
+});
+
+app.get("/api/saas/admin/overview", (req, res) => {
+  res.json(saasDb.getAdminOverview());
+});
+
+app.post("/api/saas/admin/update-user", (req, res) => {
+  const { email, tier, resetDownloads } = req.body;
+  if (!email) return res.status(400).json({ error: "Email required" });
+  
+  if (tier) {
+    saasDb.setUserTier(email, tier);
+  }
+  if (resetDownloads) {
+    saasDb.resetUserDownloads(email);
+  }
+  res.json({ success: true, user: saasDb.getUser(email) });
+});
+
 // Setup dev/prod server serving static and proxying modules
 async function setupServer() {
   if (process.env.NODE_ENV !== "production") {

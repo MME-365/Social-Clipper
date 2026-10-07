@@ -1,0 +1,134 @@
+{
+  "plans": {
+    "free": {
+      "name": "Free Starter",
+      "price": 0,
+      "interval": "week",
+      "downloadLimit": 1,
+      "allowBatch": false,
+      "paypalLink": "",
+      "features": [
+        "1 download/wk"
+      ]
+    },
+    "creator": {
+      "name": "Creator Tier",
+      "price": 9,
+      "interval": "month",
+      "downloadLimit": 35,
+      "allowBatch": true,
+      "paypalLink": "https://www.paypal.com/ncp/payment/MYCREATOR",
+      "features": [
+        "35 downloads/mo"
+      ]
+    },
+    "enterprise": {
+      "name": "Enterprise Tier",
+      "price": 99,
+      "interval": "month",
+      "downloadLimit": 400,
+      "allowBatch": true,
+      "paypalLink": "https://www.paypal.com/ncp/payment/MYENTERPRISE",
+      "features": [
+        "400 downloads/mo"
+      ]
+    }
+  },
+  "paypalSettings": {
+    "creatorPayPalLink": "https://www.paypal.com/ncp/payment/CREATOR9",
+    "enterprisePayPalLink": "https://www.paypal.com/ncp/payment/ENTERPRISE99",
+    "paypalClientId": "sb-client-id-sample",
+    "merchantEmail": "billing@socialclipper.io"
+  },
+  "users": [
+    {
+      "id": "usr_free_default",
+      "email": "demo@user.com",
+      "name": "Demo Creator",
+      "tier": "free",
+      "downloadsUsed": 0,
+      "downloadsLimit": 1,
+      "cycleResetDate": "2026-10-13T22:53:45.208Z",
+      "joinedDate": "2026-10-03T22:52:28.062Z",
+      "totalVideosProcessed": 4
+    },
+    {
+      "id": "usr_creator_sample",
+      "email": "sarah.content@creator.com",
+      "name": "Sarah Jenkins",
+      "tier": "creator",
+      "downloadsUsed": 12,
+      "downloadsLimit": 35,
+      "cycleResetDate": "2026-10-24T22:52:28.062Z",
+      "joinedDate": "2026-09-11T22:52:28.062Z",
+      "totalVideosProcessed": 48
+    },
+    {
+      "id": "usr_ent_sample",
+      "email": "agency@viralbeats.media",
+      "name": "ViralBeats Media Agency",
+      "tier": "enterprise",
+      "downloadsUsed": 142,
+      "downloadsLimit": 400,
+      "cycleResetDate": "2026-10-20T22:52:28.062Z",
+      "joinedDate": "2026-08-07T22:52:28.062Z",
+      "totalVideosProcessed": 520
+    }
+  ],
+  "transactions": [
+    {
+      "id": "tx_1791327188367",
+      "userEmail": "demo@user.com",
+      "plan": "creator",
+      "amount": 9,
+      "status": "completed",
+      "date": "2026-10-06T22:53:08.367Z",
+      "paypalTransactionId": "PAYPAL_0TW7JYYZ"
+    },
+    {
+      "id": "tx_1791327180457",
+      "userEmail": "demo@user.com",
+      "plan": "creator",
+      "amount": 9,
+      "status": "completed",
+      "date": "2026-10-06T22:53:00.457Z",
+      "paypalTransactionId": "PAYPAL_XIG23FOK"
+    },
+    {
+      "id": "tx_1791327161283",
+      "userEmail": "demo@user.com",
+      "plan": "creator",
+      "amount": 9,
+      "status": "completed",
+      "date": "2026-10-06T22:52:41.283Z",
+      "paypalTransactionId": "PAYPAL_7SOB600J"
+    },
+    {
+      "id": "tx_109283",
+      "userEmail": "agency@viralbeats.media",
+      "plan": "enterprise",
+      "amount": 99,
+      "status": "completed",
+      "date": "2026-09-20T22:52:28.062Z",
+      "paypalTransactionId": "PAYPAL_TX_ENT_9847192"
+    },
+    {
+      "id": "tx_109284",
+      "userEmail": "sarah.content@creator.com",
+      "plan": "creator",
+      "amount": 9,
+      "status": "completed",
+      "date": "2026-09-24T22:52:28.062Z",
+      "paypalTransactionId": "PAYPAL_TX_CRE_3817290"
+    },
+    {
+      "id": "tx_109285",
+      "userEmail": "alex.shorts@studio.co",
+      "plan": "creator",
+      "amount": 9,
+      "status": "completed",
+      "date": "2026-10-02T22:52:28.062Z",
+      "paypalTransactionId": "PAYPAL_TX_CRE_4401928"
+    }
+  ]
+}
