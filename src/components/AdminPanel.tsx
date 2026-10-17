@@ -59,7 +59,7 @@ export function AdminPanel({
         <div>
           <div className="flex items-center gap-2">
             <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <h2 className="font-display font-bold text-lg text-slate-900">SaaS Admin Control Center</h2>
+            <h2 className="font-display font-bold text-lg text-slate-900">Admin Control Center</h2>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
             Manage packages, pricing, download limits, PayPal payment links, and live transactions.

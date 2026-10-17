@@ -26,7 +26,7 @@ export function MarketComparison({ onOpenPricing, onOpenStudio }: MarketComparis
 
   const competitors = [
     {
-      name: "SocialClipper SaaS",
+      name: "SocialClipper",
       isUs: true,
       price: "$9 / month",
       volume: "35 full videos",

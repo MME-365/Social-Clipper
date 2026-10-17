@@ -64,7 +64,7 @@ export function Header({
           </div>
           <div>
             <h1 className="font-display text-base font-bold tracking-tight text-slate-900 leading-none">
-              SocialClipper <span className="text-violet-600 font-extrabold">SaaS</span>
+              Social<span className="text-violet-600 font-extrabold">Clipper</span>
             </h1>
             <p className="text-[10px] text-slate-400 hidden sm:block mt-0.5">
               YouTube to 9:16 Shorts

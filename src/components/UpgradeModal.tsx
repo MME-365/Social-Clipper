@@ -36,7 +36,7 @@ export function UpgradeModal({
         <div className="space-y-2">
           <div className="inline-flex items-center gap-1.5 text-xs font-bold text-violet-700 bg-violet-50 px-3 py-1 rounded-full border border-violet-200/60">
             <Zap className="h-3.5 w-3.5 text-violet-600" />
-            <span>SaaS Plan Upgrade Required</span>
+            <span>Plan Upgrade Required</span>
           </div>
 
           <h3 className="font-display font-bold text-xl text-slate-900">

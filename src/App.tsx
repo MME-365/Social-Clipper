@@ -1049,7 +1049,7 @@ export default function App() {
             />
           ) : (
             <div className="text-center py-16 text-slate-500 text-xs">
-              Loading SaaS Admin Control Center...
+              Loading Admin Control Center...
             </div>
           )}
         </main>
@@ -1445,7 +1445,7 @@ export default function App() {
 
       {/* Clean Footer */}
       <footer className="border-t border-slate-200/80 bg-white py-4 px-6 text-center text-xs text-slate-500 flex flex-col sm:flex-row items-center justify-between gap-2 max-w-6xl w-full mx-auto">
-        <div>SocialClipper SaaS • 9:16 Shorts Automation Platform</div>
+        <div>SocialClipper • 9:16 Shorts Automation Platform</div>
         <div className="flex items-center gap-4 text-[11px] text-slate-400 font-medium">
           <button onClick={() => setCurrentView("landing")} className="hover:text-slate-700 cursor-pointer">Pricing</button>
           <span>·</span>

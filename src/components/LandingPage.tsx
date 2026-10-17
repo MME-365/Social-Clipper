@@ -51,7 +51,7 @@ export function LandingPage({
             href="#pricing"
             className="w-full sm:w-auto px-6 py-3 rounded-xl bg-white hover:bg-slate-50 text-slate-800 border border-slate-200 font-semibold text-sm transition text-center"
           >
-            View SaaS Plans & Pricing
+            View Plans & Pricing
           </a>
           <a
             href="#comparison"
@@ -150,7 +150,7 @@ export function LandingPage({
       <section id="pricing" className="max-w-5xl mx-auto px-4 space-y-8 scroll-mt-20">
         <div className="text-center space-y-2">
           <h2 className="font-display text-2xl sm:text-3xl font-extrabold text-slate-900">
-            Simple, Transparent SaaS Pricing
+            Simple, Transparent Pricing
           </h2>
           <p className="text-xs sm:text-sm text-slate-500 max-w-lg mx-auto">
             Choose the right volume for your workflow. Start free, or scale with Creator & Enterprise plans via secure PayPal checkout.
