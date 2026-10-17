@@ -34,6 +34,8 @@ export function MarketComparison({ onOpenPricing, onOpenStudio }: MarketComparis
       batchExport: "Yes (All 5 at once)",
       fullVideo916: "Yes (Full length)",
       directShare: "Yes (TikTok, Reels, Shorts)",
+      karaokeSubtitles: "Yes (Hormozi / Neon Burned-In)",
+      viralityScore: "Yes (Retention & Hook Gauge)",
       framingControl: "Custom Pan (Left/Center/Right)",
       creditPenalty: "No (Unlimited retries)",
       highlight: "Best Creator Value"
@@ -47,6 +49,8 @@ export function MarketComparison({ onOpenPricing, onOpenStudio }: MarketComparis
       batchExport: "Limited",
       fullVideo916: "No",
       directShare: "Scheduling only (Paid)",
+      karaokeSubtitles: "Yes (Standard)",
+      viralityScore: "Yes (Static 0-100)",
       framingControl: "Auto-only (Black box)",
       creditPenalty: "Yes (Minutes deducted on fail)",
       highlight: "Expensive minutes"
@@ -60,6 +64,8 @@ export function MarketComparison({ onOpenPricing, onOpenStudio }: MarketComparis
       batchExport: "Queued",
       fullVideo916: "No",
       directShare: "Requires API auth",
+      karaokeSubtitles: "Basic",
+      viralityScore: "Trending keyword tags",
       framingControl: "Auto-only",
       creditPenalty: "Yes (High minute burn)",
       highlight: "Agency pricing"
@@ -73,6 +79,8 @@ export function MarketComparison({ onOpenPricing, onOpenStudio }: MarketComparis
       batchExport: "No",
       fullVideo916: "No",
       directShare: "Basic download",
+      karaokeSubtitles: "Yes",
+      viralityScore: "Basic index",
       framingControl: "Limited",
       creditPenalty: "Yes",
       highlight: "Very low volume"
@@ -86,6 +94,8 @@ export function MarketComparison({ onOpenPricing, onOpenStudio }: MarketComparis
       batchExport: "No (Manual timeline)",
       fullVideo916: "Manual keyframes",
       directShare: "TikTok only",
+      karaokeSubtitles: "Manual auto-captions",
+      viralityScore: "None",
       framingControl: "Manual keyframing",
       creditPenalty: "N/A",
       highlight: "High editing time"
@@ -298,42 +308,42 @@ export function MarketComparison({ onOpenPricing, onOpenStudio }: MarketComparis
             </div>
 
             {/* 2. Burned-In Dynamic Karaoke Subtitles */}
-            <div className="border border-slate-200 rounded-xl p-5 space-y-3 bg-white shadow-xs">
+            <div className="border border-emerald-200 rounded-xl p-5 space-y-3 bg-white shadow-xs">
               <div className="flex items-start justify-between">
                 <div className="space-y-1">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-rose-600 bg-rose-50 px-2 py-0.5 rounded">
-                    Competitor Advantage #2
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                    Feature Added & Fully Live 🚀
                   </span>
-                  <h3 className="font-display font-bold text-sm text-slate-900">
-                    Burned-In Dynamic Karaoke Captions
+                  <h3 className="font-display font-bold text-sm text-slate-900 flex items-center gap-1.5">
+                    Burned-In Animated Karaoke Subtitles
                   </h3>
                 </div>
               </div>
               <p className="text-xs text-slate-600 leading-relaxed">
-                <strong>What they do:</strong> CapCut and Opus Clip burn animated subtitles (Alex Hormozi style with bouncing words, yellow/green highlights, and emojis) directly into the video pixels using Whisper speech-to-text.
+                <strong>What competitors charge $19-$49 for:</strong> Burning animated subtitles (Alex Hormozi style with bouncing words, fluorescent yellow highlights, and glowing strokes) directly onto video frames.
               </p>
-              <div className="text-xs text-violet-700 bg-violet-50 p-3 rounded-lg border border-violet-100 font-medium">
-                <strong>Our Current vs Future State:</strong> We currently generate tailored platform text captions and hashtags with 1-click clipboard copying. Adding client-side or FFmpeg subtitle burn-in will match their highest visual hook feature.
+              <div className="text-xs text-emerald-800 bg-emerald-50 p-3 rounded-lg border border-emerald-200 font-medium">
+                <strong>Now Live in SocialClipper:</strong> Built right in! Choose between <strong>Hormozi Bouncy Pop</strong>, <strong>Cyberpunk Neon</strong>, <strong>Flame Gradient</strong>, or <strong>Clean Studio</strong>. See real-time previews on the 9:16 phone screen, and burn text directly into the canvas/MP4 download!
               </div>
             </div>
 
             {/* 3. AI Virality Score Metric */}
-            <div className="border border-slate-200 rounded-xl p-5 space-y-3 bg-white shadow-xs">
+            <div className="border border-emerald-200 rounded-xl p-5 space-y-3 bg-white shadow-xs">
               <div className="flex items-start justify-between">
                 <div className="space-y-1">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 bg-amber-50 px-2 py-0.5 rounded">
-                    Competitor Advantage #3
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                    Feature Added & Fully Live 🚀
                   </span>
-                  <h3 className="font-display font-bold text-sm text-slate-900">
-                    Gamified "Virality Score" (e.g. 94/100)
+                  <h3 className="font-display font-bold text-sm text-slate-900 flex items-center gap-1.5">
+                    Algorithmic Virality Score & Retention Prediction
                   </h3>
                 </div>
               </div>
               <p className="text-xs text-slate-600 leading-relaxed">
-                <strong>What they do:</strong> Opus Clip displays a gamified score ("Virality Score: 92/100 · Strong Hook") next to each clip, telling the creator why this clip is expected to perform well on TikTok.
+                <strong>What competitors claim:</strong> Opus Clip shows a gamified score (e.g. 92/100) predicting social algorithm retention based on speech patterns.
               </p>
-              <div className="text-xs text-violet-700 bg-violet-50 p-3 rounded-lg border border-violet-100 font-medium">
-                <strong>Our Edge:</strong> We provide pacing peak detection (Intro, Hook, Beat Drop, Outro) which music creators specifically need, avoiding speech-only bias.
+              <div className="text-xs text-emerald-800 bg-emerald-50 p-3 rounded-lg border border-emerald-200 font-medium">
+                <strong>Now Live in SocialClipper:</strong> Interactive <strong>Virality Gauge</strong> with 0-100 score, 15-second predicted retention rate %, hook & pacing breakdown, audio energy index, and actionable tactical creator recommendations.
               </div>
             </div>
 

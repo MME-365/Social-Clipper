@@ -29,6 +29,7 @@ import { LandingPage } from "./components/LandingPage";
 import { UserDashboard } from "./components/UserDashboard";
 import { AdminPanel } from "./components/AdminPanel";
 import { UpgradeModal } from "./components/UpgradeModal";
+import { DownloadReadyModal, DownloadModalData } from "./components/DownloadReadyModal";
 import { VideoClip, AspectRatioType, SaaSUser, PlanConfig, PayPalSettings, AdminOverview, KaraokeConfig } from "./types";
 import { KaraokeOverlay } from "./components/KaraokeOverlay";
 import { drawKaraokeSubtitles } from "./utils/karaokeRenderer";
@@ -36,6 +37,9 @@ import { drawKaraokeSubtitles } from "./utils/karaokeRenderer";
 export default function App() {
   // Navigation View: Home page is Pricing/Landing, Dashboard accessible from Home, Studio accessible from Dashboard
   const [currentView, setCurrentView] = useState<"studio" | "landing" | "dashboard" | "admin">("landing");
+
+  // Download Ready & Share Drawer State (prevents cookie errors upon mobile/iframe downloads)
+  const [downloadModalData, setDownloadModalData] = useState<DownloadModalData | null>(null);
 
   // SaaS User & Configuration State
   const [currentUser, setCurrentUser] = useState<SaaSUser>({
@@ -463,13 +467,71 @@ export default function App() {
     }
   };
 
-  const downloadUrlFile = (url: string, filename: string) => {
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    setTimeout(() => document.body.removeChild(link), 150);
+  // Robust download handler that bypasses third-party cookie restrictions and prevents .html download errors
+  const downloadUrlFile = async (
+    url: string,
+    filename: string,
+    clipTitle: string = "9:16 Video Clip",
+    caption?: string
+  ): Promise<boolean> => {
+    try {
+      let finalBlobUrl = url;
+      let finalBlob: Blob | undefined = undefined;
+
+      if (!url.startsWith("blob:")) {
+        // Fetch via in-page session with credentials included so Cloud Run proxy headers are preserved
+        const res = await fetch(url, { credentials: "include" });
+        if (!res.ok) {
+          throw new Error(`Server returned HTTP ${res.status}`);
+        }
+        const contentType = res.headers.get("content-type") || "";
+        if (contentType.includes("text/html")) {
+          throw new Error("Received HTML error page instead of video binary. Please open video in a new window.");
+        }
+        finalBlob = await res.blob();
+        finalBlobUrl = URL.createObjectURL(finalBlob);
+      }
+
+      // Trigger standard browser download using safe in-memory blob URL
+      const link = document.createElement("a");
+      link.href = finalBlobUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      setTimeout(() => {
+        document.body.removeChild(link);
+      }, 300);
+
+      // Open the Download Ready drawer / modal for direct preview, re-download, and mobile share
+      setDownloadModalData({
+        url,
+        blobUrl: finalBlobUrl,
+        blob: finalBlob,
+        filename,
+        clipTitle,
+        caption
+      });
+
+      return true;
+    } catch (err: any) {
+      console.warn("Direct blob download error, fallback to direct anchor:", err);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      link.target = "_blank";
+      document.body.appendChild(link);
+      link.click();
+      setTimeout(() => document.body.removeChild(link), 300);
+
+      setDownloadModalData({
+        url,
+        blobUrl: url,
+        filename,
+        clipTitle,
+        caption
+      });
+      return false;
+    }
   };
 
   // SaaS Download Gatekeeper
@@ -506,18 +568,31 @@ export default function App() {
     startTime: number,
     endTime: number,
     panOffset: number,
-    filename: string
+    filename: string,
+    targetClip?: VideoClip
   ): Promise<boolean> => {
     try {
       const res = await fetch("/api/render-clip-ffmpeg", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ startTime, endTime, panOffset, filename })
+        body: JSON.stringify({ 
+          startTime, 
+          endTime, 
+          panOffset, 
+          filename,
+          videoId: youtubeId 
+        })
       });
       if (res.ok) {
         const data = await res.json();
-        if (data.url) {
-          downloadUrlFile(data.url, filename);
+        const targetUrl = data.downloadUrl || data.url;
+        if (targetUrl) {
+          await downloadUrlFile(
+            targetUrl,
+            filename,
+            targetClip?.segmentType ? `Clip: ${targetClip.segmentType}` : "9:16 Video Clip",
+            targetClip?.captions?.tiktok
+          );
           return true;
         }
       }
@@ -578,7 +653,13 @@ export default function App() {
           mediaRecorder.onstop = () => {
             const blob = new Blob(chunks, { type: "video/webm" });
             const url = URL.createObjectURL(blob);
-            downloadUrlFile(url, filename.replace(/\.mp4$/, ".webm"));
+            const outName = filename.replace(/\.mp4$/, ".webm");
+            downloadUrlFile(
+              url,
+              outName,
+              targetClip?.segmentType ? `Clip: ${targetClip.segmentType}` : "9:16 Video Clip",
+              targetClip?.captions?.tiktok
+            );
             resolve();
           };
 
@@ -656,11 +737,30 @@ export default function App() {
     const cleanSegment = targetClip.segmentType.toLowerCase().replace(/[^a-z0-9]+/g, "_");
     const filename = `clip_${index + 1}_${cleanSegment}_9x16.mp4`;
 
+    // If video source is available and animated karaoke is enabled, record via canvas with burned-in animated karaoke subtitles
+    if (videoSrc && targetClip.karaokeConfig?.enabled !== false) {
+      await renderRangeViaMediaRecorder(
+        targetClip.startTime,
+        targetClip.endTime,
+        targetClip.panOffset || 0,
+        filename,
+        (p) => setExportProgress(p),
+        targetClip
+      );
+      setExportProgress(100);
+      setDownloadSuccessMsg(`Downloaded Clip #${index + 1} in 9:16 with burned-in animated karaoke subtitles!`);
+      setTimeout(() => setDownloadSuccessMsg(null), 4000);
+      setExportingMode("none");
+      fetchSaasData();
+      return;
+    }
+
     const ffmpegSuccess = await renderRangeViaFFmpeg(
       targetClip.startTime,
       targetClip.endTime,
       targetClip.panOffset || 0,
-      filename
+      filename,
+      targetClip
     );
 
     if (ffmpegSuccess) {
@@ -683,6 +783,9 @@ export default function App() {
       );
       setDownloadSuccessMsg(`Downloaded Clip #${index + 1} in 9:16 with baked animated captions!`);
       setTimeout(() => setDownloadSuccessMsg(null), 4000);
+      setExportingMode("none");
+      fetchSaasData();
+      return;
     } else {
       const summaryText = `[SocialClipper 9:16 Clip ${index + 1}]\n` +
         `Video Title: ${parsedTitle}\n` +
@@ -692,7 +795,12 @@ export default function App() {
         `Instagram Caption:\n${targetClip.captions.instagram}\n`;
 
       const blob = new Blob([summaryText], { type: "text/plain;charset=utf-8" });
-      downloadUrlFile(URL.createObjectURL(blob), `clip_${index + 1}_${cleanSegment}_9x16_bundle.txt`);
+      await downloadUrlFile(
+        URL.createObjectURL(blob),
+        `clip_${index + 1}_${cleanSegment}_9x16_bundle.txt`,
+        `Clip #${index + 1} Metadata`,
+        targetClip.captions.tiktok
+      );
       setDownloadSuccessMsg(`Downloaded Clip #${index + 1} social metadata package!`);
       setTimeout(() => setDownloadSuccessMsg(null), 4000);
     }
@@ -719,7 +827,8 @@ export default function App() {
         c.startTime,
         c.endTime,
         c.panOffset || 0,
-        filename
+        filename,
+        c
       );
 
       if (!ffmpegSuccess && videoSrc) {
@@ -734,7 +843,12 @@ export default function App() {
       } else if (!ffmpegSuccess) {
         const summaryText = `[SocialClipper Clip ${i + 1}]\n${c.segmentType}\n${c.startTime}s - ${c.endTime}s\nCaption:\n${c.captions.tiktok}`;
         const blob = new Blob([summaryText], { type: "text/plain;charset=utf-8" });
-        downloadUrlFile(URL.createObjectURL(blob), `clip_${i + 1}_${cleanSegment}_9x16.txt`);
+        await downloadUrlFile(
+          URL.createObjectURL(blob),
+          `clip_${i + 1}_${cleanSegment}_9x16.txt`,
+          `Clip #${i + 1} Metadata`,
+          c.captions.tiktok
+        );
       }
 
       setBatchProgress({ current: i + 1, total: clips.length, progress: 100 });
@@ -762,7 +876,8 @@ export default function App() {
       0,
       duration,
       activePan,
-      filename
+      filename,
+      clips[activeClipIndex]
     );
 
     if (ffmpegSuccess) {
@@ -787,7 +902,12 @@ export default function App() {
     } else {
       const summaryText = `[SocialClipper Full 9:16 Video Config]\nTitle: ${parsedTitle}\nDuration: 0:00 - ${formatTime(duration)}\nPan: ${activePan}%`;
       const blob = new Blob([summaryText], { type: "text/plain;charset=utf-8" });
-      downloadUrlFile(URL.createObjectURL(blob), `full_video_9x16_master.txt`);
+      await downloadUrlFile(
+        URL.createObjectURL(blob),
+        `full_video_9x16_master.txt`,
+        "Full Video 9:16 Master Config",
+        clips[0]?.captions.tiktok
+      );
       setDownloadSuccessMsg("Exported full video 9:16 configuration package!");
       setTimeout(() => setDownloadSuccessMsg(null), 4000);
     }
@@ -1194,6 +1314,9 @@ export default function App() {
                       {currentPan === 0 ? "Center" : currentPan < 0 ? "Left" : "Right"}
                     </span>
                   </div>
+
+                  {/* Real-time Animated Karaoke Text Overlay */}
+                  <KaraokeOverlay clip={activeClip} currentTime={currentTime} />
                 </div>
               </div>
 
@@ -1284,6 +1407,7 @@ export default function App() {
                   exportingMode={exportingMode}
                   exportProgress={exportProgress}
                   batchProgress={batchProgress}
+                  onUpdateKaraoke={handleUpdateKaraoke}
                 />
               )}
             </div>
@@ -1310,6 +1434,13 @@ export default function App() {
         enterprisePlan={saasPlans.enterprise}
         paypalSettings={paypalSettings}
         onUpgrade={handleUpgradeUser}
+      />
+
+      {/* Direct Download & Mobile Share Drawer (Bypasses Iframe Cookie Limitations) */}
+      <DownloadReadyModal
+        isOpen={!!downloadModalData}
+        onClose={() => setDownloadModalData(null)}
+        data={downloadModalData}
       />
 
       {/* Clean Footer */}

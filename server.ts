@@ -21,7 +21,12 @@ const DOWNLOADS_DIR = path.join(process.cwd(), "downloads");
 if (!fs.existsSync(DOWNLOADS_DIR)) {
   fs.mkdirSync(DOWNLOADS_DIR, { recursive: true });
 }
-app.use("/downloads", express.static(DOWNLOADS_DIR));
+app.use("/downloads", (req, res, next) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "*");
+  next();
+}, express.static(DOWNLOADS_DIR));
 
 const PORT = 3000;
 
@@ -530,12 +535,21 @@ For each of the 5 segments, you MUST provide:
 3. startTime: Start position in seconds (e.g. 15.0). Ensure it fits cleanly between 0 and (total duration - 15).
 4. endTime: End position in seconds (must be exactly startTime + 15 seconds, e.g. 30.0). No clips can exceed ${videoDuration} seconds.
 5. captions: Specific, highly engaging caption drafts with appropriate formatting, visual hooks (emojis), and trending platform hashtags for TikTok, Instagram Reels, and YouTube Shorts.
-6. creativeIdea: Brief layout, visual crop adjustment, or video pacing enhancement idea (e.g. 'Vertical crop focusing on the guitarist's solo' or 'Use dynamic fast speed ramping during the beat drop').
+6. creativeIdea: Brief layout, visual crop adjustment, or video pacing enhancement idea.
+7. viralityMetrics: Algorithmic prediction of viral probability and retention. Must include:
+   - viralityScore (integer 65 - 99)
+   - retentionProbability (integer 60 - 98)
+   - hookScore (integer 70 - 99)
+   - pacingScore (integer 65 - 98)
+   - audioEnergy (integer 60 - 100)
+   - hookLabel (e.g. 'Viral Hook Window', 'High Retention Drop', 'Hypnotic Pattern-Interrupt')
+   - factors (array of 3 concrete viral hook factors)
+   - recommendation (tactical creator tip to maximize completion rate)
 
 Return the result strictly in JSON matching the specified schema format.`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: "gemini-2.5-flash",
       contents: prompt,
       config: {
         systemInstruction: "You are an elite music video producer, marketer, and social media media curation specialist. You craft content strategy designed to maximize user retention and viral potential.",
@@ -551,7 +565,7 @@ Return the result strictly in JSON matching the specified schema format.`;
               type: Type.ARRAY,
               items: {
                 type: Type.OBJECT,
-                required: ["clipIndex", "segmentType", "startTime", "endTime", "captions", "creativeIdea"],
+                required: ["clipIndex", "segmentType", "startTime", "endTime", "captions", "creativeIdea", "viralityMetrics"],
                 properties: {
                   clipIndex: { type: Type.INTEGER },
                   segmentType: { type: Type.STRING },
@@ -566,7 +580,24 @@ Return the result strictly in JSON matching the specified schema format.`;
                       youtube: { type: Type.STRING }
                     }
                   },
-                  creativeIdea: { type: Type.STRING }
+                  creativeIdea: { type: Type.STRING },
+                  viralityMetrics: {
+                    type: Type.OBJECT,
+                    required: ["viralityScore", "retentionProbability", "hookScore", "hookLabel", "factors", "recommendation"],
+                    properties: {
+                      viralityScore: { type: Type.INTEGER },
+                      retentionProbability: { type: Type.INTEGER },
+                      hookScore: { type: Type.INTEGER },
+                      pacingScore: { type: Type.INTEGER },
+                      audioEnergy: { type: Type.INTEGER },
+                      hookLabel: { type: Type.STRING },
+                      factors: {
+                        type: Type.ARRAY,
+                        items: { type: Type.STRING }
+                      },
+                      recommendation: { type: Type.STRING }
+                    }
+                  }
                 }
               }
             }
@@ -597,15 +628,38 @@ app.post("/api/upload-video", express.raw({ type: "video/*", limit: "250mb" }), 
 
 import { saasDb } from "./server_saas.js";
 
+// Dedicated endpoint to download rendered MP4 with explicit attachment headers and CORS
+app.get("/api/download-clip/:filename", (req, res) => {
+  const filename = path.basename(req.params.filename);
+  const filePath = path.join(DOWNLOADS_DIR, filename);
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({ error: "File not found" });
+  }
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  res.setHeader("Content-Type", "video/mp4");
+  res.download(filePath, filename);
+});
+
 // Endpoint to render 9:16 video clips or full video using FFmpeg
 app.post("/api/render-clip-ffmpeg", async (req, res) => {
   try {
-    const { startTime, endTime, panOffset = 0, filename = "clip_9x16.mp4" } = req.body;
+    const { startTime, endTime, panOffset = 0, filename = "clip_9x16.mp4", videoId } = req.body;
     
-    // Prefer user uploaded video if present, otherwise sample video
+    // Check for source video: videoId first, then user_video.mp4, then sample_music_video.mp4
+    const ytVideo = videoId ? path.join(DOWNLOADS_DIR, `${videoId}.mp4`) : null;
     const userVideo = path.join(DOWNLOADS_DIR, "user_video.mp4");
     const sampleVideo = path.join(DOWNLOADS_DIR, "sample_music_video.mp4");
-    const sourceVideo = fs.existsSync(userVideo) ? userVideo : sampleVideo;
+    
+    let sourceVideo = sampleVideo;
+    if (ytVideo && fs.existsSync(ytVideo)) {
+      sourceVideo = ytVideo;
+    } else if (fs.existsSync(userVideo)) {
+      sourceVideo = userVideo;
+    } else if (fs.existsSync(sampleVideo)) {
+      sourceVideo = sampleVideo;
+    }
 
     if (!fs.existsSync(sourceVideo)) {
       return res.status(404).json({ error: "Source video not ready on server" });
@@ -626,6 +680,7 @@ app.post("/api/render-clip-ffmpeg", async (req, res) => {
     res.json({
       success: true,
       url: `/downloads/${cleanName}`,
+      downloadUrl: `/api/download-clip/${cleanName}`,
       filename: cleanName
     });
   } catch (err: any) {

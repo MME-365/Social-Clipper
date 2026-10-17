@@ -1,13 +1,7 @@
-import { VideoClip, KaraokeStyle, KaraokePosition } from "../types";
-
-export interface SubtitleWord {
-  word: string;
-  start: number;
-  end: number;
-}
+import { VideoClip, KaraokeStyle, KaraokePosition, KaraokeLine, KaraokeWord } from "../types";
 
 // Generates default animated karaoke phrases for a clip if none specified
-export function generateDefaultKaraoke(clip: VideoClip): Array<{ text: string; start: number; end: number; words: SubtitleWord[] }> {
+export function generateDefaultKaraoke(clip: VideoClip): KaraokeLine[] {
   const duration = Math.max(1, clip.endTime - clip.startTime);
   const mid = clip.startTime + duration / 2;
   
@@ -32,27 +26,27 @@ export function generateDefaultKaraoke(clip: VideoClip): Array<{ text: string; s
     phrase2 = "SAVE THIS FOR LATER ⚡";
   }
 
-  const makeWords = (phrase: string, start: number, end: number): SubtitleWord[] => {
+  const makeWords = (phrase: string, start: number, end: number): KaraokeWord[] => {
     const rawWords = phrase.split(/\s+/).filter(Boolean);
     const step = (end - start) / rawWords.length;
     return rawWords.map((word, i) => ({
       word,
-      start: start + i * step,
-      end: start + (i + 1) * step
+      startTime: start + i * step,
+      endTime: start + (i + 1) * step
     }));
   };
 
   return [
     {
       text: phrase1,
-      start: clip.startTime,
-      end: mid,
+      startTime: clip.startTime,
+      endTime: mid,
       words: makeWords(phrase1, clip.startTime, mid)
     },
     {
       text: phrase2,
-      start: mid,
-      end: clip.endTime,
+      startTime: mid,
+      endTime: clip.endTime,
       words: makeWords(phrase2, mid, clip.endTime)
     }
   ];
@@ -129,8 +123,8 @@ export function drawKaraokeSubtitles(
   let currentX = startX;
 
   words.forEach((w, idx) => {
-    const isPast = currentTime > w.end;
-    const isActive = currentTime >= w.start && currentTime <= w.end;
+    const isPast = currentTime > w.endTime;
+    const isActive = currentTime >= w.startTime && currentTime <= w.endTime;
     const wordWidth = wordMetrics[idx].width;
     const wordCenterX = currentX + wordWidth / 2;
 
@@ -138,8 +132,8 @@ export function drawKaraokeSubtitles(
 
     // Scale / Bounce effect for active word (The viral Hormozi pop!)
     if (isActive) {
-      const elapsed = currentTime - w.start;
-      const progress = Math.min(1, elapsed / (w.end - w.start));
+      const elapsed = currentTime - w.startTime;
+      const progress = Math.min(1, elapsed / (w.endTime - w.startTime));
       // Bouncing scale: 1.0 -> 1.25 -> 1.15
       const bounce = 1.0 + Math.sin(progress * Math.PI) * 0.25;
 

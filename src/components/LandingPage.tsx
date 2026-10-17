@@ -73,9 +73,29 @@ export function LandingPage({
       </section>
 
       {/* Feature Value Pillars */}
-      <section className="max-w-5xl mx-auto px-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <section className="max-w-5xl mx-auto px-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-xs space-y-2.5">
           <div className="h-9 w-9 rounded-xl bg-violet-100 text-violet-700 flex items-center justify-center">
+            <Sparkles className="h-4.5 w-4.5" />
+          </div>
+          <h3 className="font-display font-bold text-sm text-slate-900">Burned-In Karaoke Subtitles</h3>
+          <p className="text-xs text-slate-600 leading-relaxed">
+            Alex Hormozi style bouncing animated text, Cyberpunk Neon, and Flame gradients burned directly into the video canvas and MP4 export.
+          </p>
+        </div>
+
+        <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-xs space-y-2.5">
+          <div className="h-9 w-9 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center">
+            <Flame className="h-4.5 w-4.5" />
+          </div>
+          <h3 className="font-display font-bold text-sm text-slate-900">Algorithmic Virality Score</h3>
+          <p className="text-xs text-slate-600 leading-relaxed">
+            Predicts retention probability %, analyzes 15-second drop completion rate, and provides tactical recommendations to maximize engagement.
+          </p>
+        </div>
+
+        <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-xs space-y-2.5">
+          <div className="h-9 w-9 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center">
             <Smartphone className="h-4.5 w-4.5" />
           </div>
           <h3 className="font-display font-bold text-sm text-slate-900">Custom 9:16 Pan Framing</h3>
@@ -105,7 +125,7 @@ export function LandingPage({
         </div>
 
         <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-xs space-y-2.5">
-          <div className="h-9 w-9 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center">
+          <div className="h-9 w-9 rounded-xl bg-cyan-100 text-cyan-700 flex items-center justify-center">
             <Share2 className="h-4.5 w-4.5" />
           </div>
           <h3 className="font-display font-bold text-sm text-slate-900">1-Click Social Sharing</h3>
