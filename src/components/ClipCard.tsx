@@ -20,7 +20,7 @@ import {
   Send,
   QrCode
 } from "lucide-react";
-import { VideoClip, AspectRatioType, KaraokeConfig } from "../types";
+import { VideoClip, AspectRatioType, KaraokeConfig, LogoWatermarkConfig } from "../types";
 import { SocialShareModal } from "./SocialShareModal";
 import { ViralityGauge } from "./ViralityGauge";
 import { KaraokeStudio } from "./KaraokeStudio";
@@ -44,6 +44,8 @@ interface ClipCardProps {
   exportProgress: number;
   batchProgress: { current: number; total: number; progress: number } | null;
   onUpdateKaraoke?: (config: KaraokeConfig) => void;
+  onUpdateLogo?: (config: LogoWatermarkConfig) => void;
+  onApplyLogoToAll?: (config: LogoWatermarkConfig) => void;
 }
 
 export function ClipCard({
@@ -64,7 +66,9 @@ export function ClipCard({
   exportingMode = "none",
   exportProgress = 0,
   batchProgress = null,
-  onUpdateKaraoke
+  onUpdateKaraoke,
+  onUpdateLogo,
+  onApplyLogoToAll
 }: ClipCardProps) {
   const [activeTab, setActiveTab] = useState<"tiktok" | "instagram" | "youtube">("tiktok");
   const [copied, setCopied] = useState<boolean>(false);
@@ -247,11 +251,14 @@ export function ClipCard({
           </div>
         </div>
 
-        {/* Step 3: Animated Karaoke Subtitles Studio */}
+        {/* Step 3: Animated Karaoke & Brand Watermark Studio */}
         <KaraokeStudio
           clip={clip}
           config={clip.karaokeConfig}
+          logoConfig={clip.logoConfig}
           onChangeConfig={(cfg) => onUpdateKaraoke && onUpdateKaraoke(cfg)}
+          onChangeLogoConfig={(logoCfg) => onUpdateLogo && onUpdateLogo(logoCfg)}
+          onApplyLogoToAll={onApplyLogoToAll}
         />
 
         {/* Clean Tabbed Social Captions */}

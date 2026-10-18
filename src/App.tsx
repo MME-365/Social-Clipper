@@ -30,9 +30,9 @@ import { UserDashboard } from "./components/UserDashboard";
 import { AdminPanel } from "./components/AdminPanel";
 import { UpgradeModal } from "./components/UpgradeModal";
 import { DownloadReadyModal, DownloadModalData } from "./components/DownloadReadyModal";
-import { VideoClip, AspectRatioType, SaaSUser, PlanConfig, PayPalSettings, AdminOverview, KaraokeConfig } from "./types";
+import { VideoClip, AspectRatioType, SaaSUser, PlanConfig, PayPalSettings, AdminOverview, KaraokeConfig, LogoWatermarkConfig } from "./types";
 import { KaraokeOverlay } from "./components/KaraokeOverlay";
-import { drawKaraokeSubtitles } from "./utils/karaokeRenderer";
+import { drawKaraokeSubtitles, drawBurntInLogo } from "./utils/karaokeRenderer";
 
 export default function App() {
   // Navigation View: Home page is Pricing/Landing, Dashboard accessible from Home, Studio accessible from Dashboard
@@ -397,6 +397,23 @@ export default function App() {
     setClips(updated);
   };
 
+  const handleUpdateLogo = (newLogoConfig: LogoWatermarkConfig) => {
+    const updated = [...clips];
+    updated[activeClipIndex] = {
+      ...updated[activeClipIndex],
+      logoConfig: newLogoConfig
+    };
+    setClips(updated);
+  };
+
+  const handleApplyLogoToAll = (newLogoConfig: LogoWatermarkConfig) => {
+    const updated = clips.map((c) => ({
+      ...c,
+      logoConfig: newLogoConfig
+    }));
+    setClips(updated);
+  };
+
   const handleUploadFile = async (file: File) => {
     setSelectedFile(file);
     setYoutubeId(null);
@@ -580,7 +597,9 @@ export default function App() {
           endTime, 
           panOffset, 
           filename,
-          videoId: youtubeId 
+          videoId: youtubeId,
+          logoConfig: targetClip?.logoConfig,
+          karaokeText: targetClip?.karaokeConfig?.enabled !== false ? targetClip?.karaokeConfig?.lines[0]?.text : undefined
         })
       });
       if (res.ok) {
@@ -699,6 +718,16 @@ export default function App() {
                 targetClip,
                 targetClip.karaokeConfig?.style || "hormozi",
                 targetClip.karaokeConfig?.position || "bottom"
+              );
+            }
+
+            // 3. Burn in brand logo / watermark directly onto the video canvas!
+            if (targetClip && targetClip.logoConfig?.enabled) {
+              drawBurntInLogo(
+                ctx,
+                w,
+                h,
+                targetClip.logoConfig
               );
             }
 
@@ -1408,6 +1437,8 @@ export default function App() {
                   exportProgress={exportProgress}
                   batchProgress={batchProgress}
                   onUpdateKaraoke={handleUpdateKaraoke}
+                  onUpdateLogo={handleUpdateLogo}
+                  onApplyLogoToAll={handleApplyLogoToAll}
                 />
               )}
             </div>

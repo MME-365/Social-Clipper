@@ -1,60 +1,46 @@
-import { VideoClip, KaraokeStyle, KaraokePosition, KaraokeLine, KaraokeWord } from "../types";
+import { VideoClip, KaraokeStyle, KaraokePosition, KaraokeLine, KaraokeWord, LogoWatermarkConfig } from "../types";
 
-// Generates default animated karaoke phrases for a clip if none specified
+// Generates exactly ONE high-impact animated karaoke phrase for a clip (never 2 phrases)
 export function generateDefaultKaraoke(clip: VideoClip): KaraokeLine[] {
   const duration = Math.max(1, clip.endTime - clip.startTime);
-  const mid = clip.startTime + duration / 2;
   
-  // Use words from the creativeIdea or a high-impact phrase based on segment
-  let phrase1 = "FEEL THE ENERGY NOW";
-  let phrase2 = "DON'T MISS THIS DROP";
+  // Single punchy hook phrase tailored to the clip's segment type
+  let singlePhrase = "FEEL THE ENERGY NOW 🔥";
 
   if (clip.segmentType.toLowerCase().includes("drop")) {
-    phrase1 = "WAIT FOR THE DROP";
-    phrase2 = "BASS HIT UNREAL 🔥";
+    singlePhrase = "WAIT FOR THE DROP ⚡";
   } else if (clip.segmentType.toLowerCase().includes("hook")) {
-    phrase1 = "THIS HOOK HITS DIFFERENT";
-    phrase2 = "PLAY IT ON REPEAT 🔁";
+    singlePhrase = "THIS HOOK HITS DIFFERENT 🔁";
   } else if (clip.segmentType.toLowerCase().includes("intro")) {
-    phrase1 = "LISTEN CAREFULLY TO THIS";
-    phrase2 = "SOMETHING BIG IS COMING";
+    singlePhrase = "LISTEN CAREFULLY TO THIS 🎧";
   } else if (clip.segmentType.toLowerCase().includes("verse")) {
-    phrase1 = "THESE LYRICS GO DEEP";
-    phrase2 = "SING EVERY SINGLE WORD";
+    singlePhrase = "SING EVERY SINGLE WORD ✨";
   } else if (clip.segmentType.toLowerCase().includes("outro")) {
-    phrase1 = "BEST PART OF THE TRACK";
-    phrase2 = "SAVE THIS FOR LATER ⚡";
+    singlePhrase = "BEST PART OF THE TRACK 🔥";
   }
 
-  const makeWords = (phrase: string, start: number, end: number): KaraokeWord[] => {
-    const rawWords = phrase.split(/\s+/).filter(Boolean);
-    const step = (end - start) / rawWords.length;
-    return rawWords.map((word, i) => ({
-      word,
-      startTime: start + i * step,
-      endTime: start + (i + 1) * step
-    }));
-  };
+  const rawWords = singlePhrase.split(/\s+/).filter(Boolean);
+  const step = duration / Math.max(1, rawWords.length);
+  const words: KaraokeWord[] = rawWords.map((word, i) => ({
+    word,
+    startTime: clip.startTime + i * step,
+    endTime: clip.startTime + (i + 1) * step
+  }));
 
+  // Enforce strictly ONE single phrase
   return [
     {
-      text: phrase1,
+      text: singlePhrase,
       startTime: clip.startTime,
-      endTime: mid,
-      words: makeWords(phrase1, clip.startTime, mid)
-    },
-    {
-      text: phrase2,
-      startTime: mid,
       endTime: clip.endTime,
-      words: makeWords(phrase2, mid, clip.endTime)
+      words
     }
   ];
 }
 
 /**
  * Renders the animated karaoke text directly onto an HTML5 Canvas context.
- * Used for both real-time player overlay and baked canvas MediaRecorder exports!
+ * Strictly avoids the top heading area and only displays ONE single phrase.
  */
 export function drawKaraokeSubtitles(
   ctx: CanvasRenderingContext2D,
@@ -70,16 +56,22 @@ export function drawKaraokeSubtitles(
     ? clip.karaokeConfig.lines
     : generateDefaultKaraoke(clip);
 
-  // Find the active line for the current timestamp
-  const activeLine = lines.find((line) => currentTime >= line.startTime - 0.2 && currentTime <= line.endTime + 0.2);
+  // Exactly ONE single phrase allowed (first line)
+  const activeLine = lines[0];
   if (!activeLine) return;
+
+  // Verify timestamp is within phrase window
+  if (currentTime < activeLine.startTime - 0.2 || currentTime > activeLine.endTime + 0.2) {
+    return;
+  }
 
   ctx.save();
 
-  // Position calculation (TikTok/Reels Safe-Zone aware)
+  // Position calculation: NEVER on heading/top bar. Strictly safe bottom or center!
   let posY = canvasHeight * 0.78; // default bottom safe area (above TikTok caption UI)
-  if (position === "center") posY = canvasHeight * 0.50;
-  if (position === "top") posY = canvasHeight * 0.22;
+  if (position === "center") {
+    posY = canvasHeight * 0.50; // exact visual center hook
+  }
 
   // Responsive font size based on canvas width (1080p target = ~48px, 360p preview = ~22px)
   const baseFontSize = Math.max(18, Math.round(canvasWidth * 0.058));
@@ -93,7 +85,7 @@ export function drawKaraokeSubtitles(
     return;
   }
 
-  // Calculate widths of each word to layout in a single centered row or wrapped row
+  // Calculate widths of each word to layout in a single centered row
   const spaceWidth = ctx.measureText(" ").width;
   const wordMetrics = words.map((w) => ({
     ...w,
@@ -133,8 +125,7 @@ export function drawKaraokeSubtitles(
     // Scale / Bounce effect for active word (The viral Hormozi pop!)
     if (isActive) {
       const elapsed = currentTime - w.startTime;
-      const progress = Math.min(1, elapsed / (w.endTime - w.startTime));
-      // Bouncing scale: 1.0 -> 1.25 -> 1.15
+      const progress = Math.min(1, elapsed / Math.max(0.01, w.endTime - w.startTime));
       const bounce = 1.0 + Math.sin(progress * Math.PI) * 0.25;
 
       ctx.translate(wordCenterX, posY);
@@ -188,6 +179,109 @@ export function drawKaraokeSubtitles(
 
     currentX += wordWidth + spaceWidth;
   });
+
+  ctx.restore();
+}
+
+// In-memory image cache for burnt-in logo rendering to prevent re-fetching on every animation frame
+const logoImageCache = new Map<string, HTMLImageElement>();
+
+/**
+ * Burns in a brand logo or creator watermark directly onto the canvas.
+ * Supports image watermarks or customizable text badges.
+ */
+export function drawBurntInLogo(
+  ctx: CanvasRenderingContext2D,
+  canvasWidth: number,
+  canvasHeight: number,
+  logoConfig?: LogoWatermarkConfig
+) {
+  if (!logoConfig || !logoConfig.enabled) return;
+
+  ctx.save();
+  ctx.globalAlpha = Math.max(0.1, Math.min(1.0, logoConfig.opacity || 0.85));
+
+  const marginX = canvasWidth * 0.05; // 5% inset
+  const marginY = canvasHeight * 0.05; // 5% inset
+
+  if (logoConfig.type === "image" && logoConfig.imageUrl) {
+    let img = logoImageCache.get(logoConfig.imageUrl);
+    if (!img) {
+      img = new Image();
+      img.crossOrigin = "anonymous";
+      img.src = logoConfig.imageUrl;
+      logoImageCache.set(logoConfig.imageUrl, img);
+    }
+
+    if (img.complete && img.naturalWidth > 0) {
+      const targetHeight = Math.max(24, Math.round(canvasHeight * 0.045 * (logoConfig.size / 24)));
+      const aspect = (img.naturalWidth || 1) / (img.naturalHeight || 1);
+      const targetWidth = targetHeight * aspect;
+
+      let x = marginX;
+      let y = marginY;
+
+      if (logoConfig.position === "top-right") {
+        x = canvasWidth - marginX - targetWidth;
+        y = marginY;
+      } else if (logoConfig.position === "bottom-left") {
+        x = marginX;
+        y = canvasHeight - marginY - targetHeight;
+      } else if (logoConfig.position === "bottom-right") {
+        x = canvasWidth - marginX - targetWidth;
+        y = canvasHeight - marginY - targetHeight;
+      }
+
+      ctx.shadowColor = "rgba(0,0,0,0.7)";
+      ctx.shadowBlur = 6;
+      ctx.drawImage(img, x, y, targetWidth, targetHeight);
+    }
+  } else {
+    // Custom Brand Text Badge (e.g. "@ArtistOfficial" or brand handle)
+    const text = logoConfig.text || "SocialClipper";
+    const fontSize = Math.max(13, Math.round(canvasWidth * 0.034 * (logoConfig.size / 20)));
+    ctx.font = `800 ${fontSize}px 'Montserrat', 'Inter', -apple-system, sans-serif`;
+    ctx.textBaseline = "middle";
+
+    const textMetrics = ctx.measureText(text);
+    const textWidth = textMetrics.width;
+    const paddingX = Math.round(fontSize * 0.6);
+    const paddingY = Math.round(fontSize * 0.4);
+    const badgeHeight = fontSize + paddingY * 2;
+    const badgeWidth = textWidth + paddingX * 2;
+
+    let badgeX = marginX;
+    let badgeY = marginY;
+
+    if (logoConfig.position === "top-right") {
+      badgeX = canvasWidth - marginX - badgeWidth;
+      badgeY = marginY;
+    } else if (logoConfig.position === "bottom-left") {
+      badgeX = marginX;
+      badgeY = canvasHeight - marginY - badgeHeight;
+    } else if (logoConfig.position === "bottom-right") {
+      badgeX = canvasWidth - marginX - badgeWidth;
+      badgeY = canvasHeight - marginY - badgeHeight;
+    }
+
+    // Glass pill background
+    ctx.fillStyle = "rgba(15, 23, 42, 0.65)";
+    ctx.beginPath();
+    ctx.roundRect(badgeX, badgeY, badgeWidth, badgeHeight, 8);
+    ctx.fill();
+
+    // Subtle border
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.25)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Brand text with outline
+    ctx.shadowColor = "rgba(0, 0, 0, 0.8)";
+    ctx.shadowBlur = 4;
+    ctx.fillStyle = "#FFFFFF";
+    ctx.textAlign = "center";
+    ctx.fillText(text, badgeX + badgeWidth / 2, badgeY + badgeHeight / 2);
+  }
 
   ctx.restore();
 }

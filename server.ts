@@ -645,7 +645,15 @@ app.get("/api/download-clip/:filename", (req, res) => {
 // Endpoint to render 9:16 video clips or full video using FFmpeg
 app.post("/api/render-clip-ffmpeg", async (req, res) => {
   try {
-    const { startTime, endTime, panOffset = 0, filename = "clip_9x16.mp4", videoId } = req.body;
+    const { 
+      startTime, 
+      endTime, 
+      panOffset = 0, 
+      filename = "clip_9x16.mp4", 
+      videoId,
+      logoConfig,
+      karaokeText
+    } = req.body;
     
     // Check for source video: videoId first, then user_video.mp4, then sample_music_video.mp4
     const ytVideo = videoId ? path.join(DOWNLOADS_DIR, `${videoId}.mp4`) : null;
@@ -674,7 +682,35 @@ app.post("/api/render-clip-ffmpeg", async (req, res) => {
     }
 
     const cropFilter = `crop=ih*9/16:ih:min(max(0\\,(iw-ih*9/16)/2+(${panOffset}/100)*(iw-ih*9/16))\\,iw-ih*9/16):0`;
-    const cmd = `ffmpeg -y ${timeArgs} -i "${sourceVideo}" -vf "${cropFilter}" -c:v libx264 -preset ultrafast -pix_fmt yuv420p -c:a aac "${outputPath}"`;
+    
+    // Optional burnt-in logo watermark
+    let watermarkFilter = "";
+    if (logoConfig?.enabled && logoConfig?.text) {
+      const cleanText = logoConfig.text.replace(/[:\\'%]/g, " ");
+      let xPos = "w-tw-25";
+      let yPos = "45";
+      if (logoConfig.position === "top-left") {
+        xPos = "25";
+        yPos = "45";
+      } else if (logoConfig.position === "bottom-left") {
+        xPos = "25";
+        yPos = "h-th-60";
+      } else if (logoConfig.position === "bottom-right") {
+        xPos = "w-tw-25";
+        yPos = "h-th-60";
+      }
+      watermarkFilter = `,drawtext=text='${cleanText}':x=${xPos}:y=${yPos}:fontsize=22:fontcolor=white:box=1:boxcolor=black@0.65:boxborderw=6`;
+    }
+
+    // Optional single-phrase burned subtitle (strictly lower third safe area, never on heading)
+    let subtitleFilter = "";
+    if (karaokeText) {
+      const cleanSub = karaokeText.replace(/[:\\'%]/g, " ").toUpperCase();
+      subtitleFilter = `,drawtext=text='${cleanSub}':x=(w-text_w)/2:y=h*0.78:fontsize=30:fontcolor=yellow:borderw=3:bordercolor=black`;
+    }
+
+    const vf = `${cropFilter}${watermarkFilter}${subtitleFilter}`;
+    const cmd = `ffmpeg -y ${timeArgs} -i "${sourceVideo}" -vf "${vf}" -c:v libx264 -preset ultrafast -pix_fmt yuv420p -c:a aac "${outputPath}"`;
     await execPromise(cmd);
 
     res.json({

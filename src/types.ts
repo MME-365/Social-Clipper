@@ -5,7 +5,19 @@ export interface SocialCaptions {
 }
 
 export type KaraokeStyle = "hormozi" | "neon" | "clean" | "fire";
-export type KaraokePosition = "bottom" | "center" | "top";
+export type KaraokePosition = "bottom" | "center"; // Excludes heading/top completely
+
+export type LogoPosition = "top-left" | "top-right" | "bottom-left" | "bottom-right";
+
+export interface LogoWatermarkConfig {
+  enabled: boolean;
+  type: "text" | "image";
+  text: string; // e.g. "@ArtistOfficial" or brand title
+  imageUrl?: string; // custom uploaded PNG/JPG logo
+  position: LogoPosition;
+  opacity: number; // 0.2 to 1.0
+  size: number; // 14 to 36
+}
 
 export interface KaraokeWord {
   word: string;
@@ -52,6 +64,7 @@ export interface VideoClip {
   exportedUrl?: string;
   karaokeConfig?: KaraokeConfig;
   viralityMetrics?: ViralityMetrics;
+  logoConfig?: LogoWatermarkConfig;
 }
 
 export interface SongAnalysisResponse {
