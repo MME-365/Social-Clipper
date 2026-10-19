@@ -30,7 +30,7 @@ import { UserDashboard } from "./components/UserDashboard";
 import { AdminPanel } from "./components/AdminPanel";
 import { UpgradeModal } from "./components/UpgradeModal";
 import { DownloadReadyModal, DownloadModalData } from "./components/DownloadReadyModal";
-import { VideoClip, AspectRatioType, SaaSUser, PlanConfig, PayPalSettings, AdminOverview, KaraokeConfig, LogoWatermarkConfig } from "./types";
+import { VideoClip, AspectRatioType, SaaSUser, PlanConfig, PayPalSettings, AdminOverview, KaraokeConfig, LogoWatermarkConfig, OneTimePack, DEFAULT_ONE_TIME_PACKS } from "./types";
 import { KaraokeOverlay } from "./components/KaraokeOverlay";
 import { drawKaraokeSubtitles, drawBurntInLogo } from "./utils/karaokeRenderer";
 
@@ -114,6 +114,8 @@ export default function App() {
     paypalClientId: "sb-client-id-sample",
     merchantEmail: "billing@socialclipper.io"
   });
+
+  const [oneTimePacks, setOneTimePacks] = useState<OneTimePack[]>(DEFAULT_ONE_TIME_PACKS);
 
   const [adminOverview, setAdminOverview] = useState<AdminOverview | null>(null);
 
@@ -232,6 +234,7 @@ export default function App() {
       if (configRes.ok) {
         const configData = await configRes.json();
         if (configData.plans) setSaasPlans(configData.plans);
+        if (configData.oneTimePacks && configData.oneTimePacks.length > 0) setOneTimePacks(configData.oneTimePacks);
         if (configData.paypalSettings) setPaypalSettings(configData.paypalSettings);
       }
 
@@ -243,6 +246,7 @@ export default function App() {
       if (adminRes.ok) {
         const adminData = await adminRes.json();
         setAdminOverview(adminData);
+        if (adminData.oneTimePacks && adminData.oneTimePacks.length > 0) setOneTimePacks(adminData.oneTimePacks);
       }
     } catch (e) {
       console.warn("Error fetching SaaS config:", e);
@@ -945,8 +949,8 @@ export default function App() {
     fetchSaasData();
   };
 
-  // SaaS Upgrade / Checkout action
-  const handleUpgradeUser = async (plan: "creator" | "enterprise") => {
+  // SaaS Upgrade / Checkout action (Monthly or Annual 20% off)
+  const handleUpgradeUser = async (plan: "creator" | "enterprise", billingCycle: "monthly" | "annual" = "monthly") => {
     try {
       const res = await fetch("/api/saas/upgrade", {
         method: "POST",
@@ -954,13 +958,16 @@ export default function App() {
         body: JSON.stringify({
           email: currentUser.email,
           plan,
-          paypalOrderId: `PAYPAL_SIM_${Date.now().toString().substring(6)}`
+          billingCycle,
+          paypalOrderId: `PAYPAL_${billingCycle.toUpperCase()}_${Date.now().toString().substring(6)}`
         })
       });
       if (res.ok) {
         const data = await res.json();
         if (data.user) setCurrentUser(data.user);
-        setDownloadSuccessMsg(`🎉 Upgraded to ${plan.toUpperCase()} Tier! Your downloads have been unlocked.`);
+        const planName = plan === "creator" ? "Creator Tier" : "Enterprise Tier";
+        const cycleText = billingCycle === "annual" ? "Annual (Save 20%)" : "Monthly";
+        setDownloadSuccessMsg(`🎉 Successfully upgraded to ${planName} (${cycleText})! Your downloads have been unlocked.`);
         setTimeout(() => setDownloadSuccessMsg(null), 5000);
         fetchSaasData();
         setCurrentView("dashboard");
@@ -970,21 +977,55 @@ export default function App() {
     }
   };
 
+  // SaaS One-Time Credit Pack Purchase
+  const handleBuyPack = async (packId: "pack_5" | "pack_25" | "pack_50") => {
+    try {
+      const activePack = oneTimePacks.find((p) => p.id === packId);
+      const res = await fetch("/api/saas/buy-pack", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: currentUser.email,
+          packId,
+          paypalOrderId: `PAYPAL_PACK_${Date.now().toString().substring(6)}`
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.user) setCurrentUser(data.user);
+        const credits = data.pack?.videoCredits || (activePack ? activePack.videoCredits : 12);
+        const price = data.pack?.price ? `$${data.pack.price}` : (activePack ? `$${activePack.price}` : "$5");
+        setDownloadSuccessMsg(`🎉 Success! Added ${credits} Video Credits (${price} One Time) to your account. Credits never expire!`);
+        setTimeout(() => setDownloadSuccessMsg(null), 6000);
+        fetchSaasData();
+        setCurrentView("dashboard");
+      }
+    } catch (e) {
+      console.error("Pack purchase error:", e);
+    }
+  };
+
   // Admin Config updates
   const handleAdminUpdateConfig = async (
     newPlans: AdminOverview["plans"],
-    newPaypalSettings: PayPalSettings
+    newPaypalSettings: PayPalSettings,
+    newPacks?: OneTimePack[]
   ) => {
     const res = await fetch("/api/saas/config", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ plans: newPlans, paypalSettings: newPaypalSettings })
+      body: JSON.stringify({
+        plans: newPlans,
+        paypalSettings: newPaypalSettings,
+        oneTimePacks: newPacks || oneTimePacks
+      })
     });
     if (res.ok) {
       const data = await res.json();
       if (data.config) {
-        setSaasPlans(data.config.plans);
-        setPaypalSettings(data.config.paypalSettings);
+        if (data.config.plans) setSaasPlans(data.config.plans);
+        if (data.config.oneTimePacks) setOneTimePacks(data.config.oneTimePacks);
+        if (data.config.paypalSettings) setPaypalSettings(data.config.paypalSettings);
       }
       fetchSaasData();
     }
@@ -1038,13 +1079,15 @@ export default function App() {
             plans={saasPlans}
             paypalSettings={paypalSettings}
             currentUser={currentUser}
-            onSelectPlan={(plan) => {
+            oneTimePacks={oneTimePacks}
+            onSelectPlan={(plan, billingCycle) => {
               if (plan === "free") {
                 setCurrentView("dashboard");
               } else {
-                handleUpgradeUser(plan);
+                handleUpgradeUser(plan, billingCycle);
               }
             }}
+            onSelectPack={handleBuyPack}
             onOpenDashboard={() => setCurrentView("dashboard")}
           />
         </main>
@@ -1057,7 +1100,9 @@ export default function App() {
             user={currentUser}
             plans={saasPlans}
             paypalSettings={paypalSettings}
+            oneTimePacks={oneTimePacks}
             onUpgrade={handleUpgradeUser}
+            onBuyPack={handleBuyPack}
             onSwitchUserEmail={(newEmail) => {
               fetchSaasData(newEmail);
             }}
@@ -1072,7 +1117,7 @@ export default function App() {
         <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-6">
           {adminOverview ? (
             <AdminPanel
-              overview={adminOverview}
+              overview={{ ...adminOverview, oneTimePacks }}
               onUpdateConfig={handleAdminUpdateConfig}
               onUpdateUser={handleAdminUpdateUser}
             />
@@ -1464,7 +1509,9 @@ export default function App() {
         creatorPlan={saasPlans.creator}
         enterprisePlan={saasPlans.enterprise}
         paypalSettings={paypalSettings}
+        oneTimePacks={oneTimePacks}
         onUpgrade={handleUpgradeUser}
+        onBuyPack={handleBuyPack}
       />
 
       {/* Direct Download & Mobile Share Drawer (Bypasses Iframe Cookie Limitations) */}

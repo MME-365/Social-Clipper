@@ -48,7 +48,7 @@
       "tier": "free",
       "downloadsUsed": 0,
       "downloadsLimit": 1,
-      "cycleResetDate": "2026-10-13T22:53:45.208Z",
+      "cycleResetDate": "2026-10-26T03:25:49.615Z",
       "joinedDate": "2026-10-03T22:52:28.062Z",
       "totalVideosProcessed": 4
     },
@@ -76,6 +76,15 @@
     }
   ],
   "transactions": [
+    {
+      "id": "tx_pack_1792380340599",
+      "userEmail": "demo@user.com",
+      "plan": "pack_5",
+      "amount": 5,
+      "status": "completed",
+      "date": "2026-10-19T03:25:40.599Z",
+      "paypalTransactionId": "PAYPAL_PACK_B18MVXA0"
+    },
     {
       "id": "tx_1791327188367",
       "userEmail": "demo@user.com",
@@ -129,6 +138,51 @@
       "status": "completed",
       "date": "2026-10-02T22:52:28.062Z",
       "paypalTransactionId": "PAYPAL_TX_CRE_4401928"
+    }
+  ],
+  "oneTimePacks": [
+    {
+      "id": "pack_5",
+      "name": "Starter Pack",
+      "price": 5,
+      "videoCredits": 12,
+      "badge": "Quick Start",
+      "pricePerVideo": "$0.42 / video",
+      "features": [
+        "12 video downloads included",
+        "No monthly recurring commitment",
+        "Burnt-in logo & custom subtitles",
+        "Credits never expire"
+      ]
+    },
+    {
+      "id": "pack_25",
+      "name": "Creator Booster Pack",
+      "price": 25,
+      "videoCredits": 65,
+      "popular": true,
+      "badge": "Most Popular Pack",
+      "pricePerVideo": "$0.38 / video",
+      "features": [
+        "65 video downloads included",
+        "No monthly recurring commitment",
+        "Burnt-in logo & custom subtitles",
+        "Credits never expire"
+      ]
+    },
+    {
+      "id": "pack_50",
+      "name": "Power Studio Vault",
+      "price": 50,
+      "videoCredits": 135,
+      "badge": "Best Value",
+      "pricePerVideo": "$0.37 / video",
+      "features": [
+        "135 video downloads included",
+        "No monthly recurring commitment",
+        "Burnt-in logo & custom subtitles",
+        "Credits never expire"
+      ]
     }
   ]
 }

@@ -18,11 +18,71 @@ export interface PayPalSettings {
   merchantEmail: string;
 }
 
+export interface OneTimePack {
+  id: "pack_5" | "pack_25" | "pack_50";
+  name: string;
+  price: number;
+  videoCredits: number;
+  pricePerVideo: string;
+  badge?: string;
+  popular?: boolean;
+  features: string[];
+}
+
+export const ONE_TIME_PACKS: OneTimePack[] = [
+  {
+    id: "pack_5",
+    name: "Starter Pack",
+    price: 5,
+    videoCredits: 12,
+    pricePerVideo: "$0.41 / video",
+    features: [
+      "12 video downloads included",
+      "No monthly recurring commitment",
+      "All 5-segment clip auto-markers",
+      "Burnt-in logo & single-phrase subtitles",
+      "Credits never expire"
+    ]
+  },
+  {
+    id: "pack_25",
+    name: "Creator Pack",
+    price: 25,
+    videoCredits: 65,
+    pricePerVideo: "$0.38 / video",
+    popular: true,
+    badge: "Most Popular Pack",
+    features: [
+      "65 video downloads included",
+      "No monthly recurring commitment",
+      "Batch 5-clip simultaneous export",
+      "Burnt-in logo & custom lyric subtitles",
+      "Credits never expire"
+    ]
+  },
+  {
+    id: "pack_50",
+    name: "Power Pack",
+    price: 50,
+    videoCredits: 135,
+    pricePerVideo: "$0.37 / video",
+    badge: "Best Value",
+    features: [
+      "135 video downloads included",
+      "Lowest cost per video (~$0.37/clip)",
+      "Full video 9:16 master export",
+      "Priority server rendering speed",
+      "Credits never expire"
+    ]
+  }
+];
+
 export interface SaaSUser {
   id: string;
   email: string;
   name: string;
-  tier: "free" | "creator" | "enterprise";
+  tier: "free" | "creator" | "enterprise" | "pack";
+  billingCycle?: "monthly" | "annual";
   downloadsUsed: number;
   downloadsLimit: number;
   cycleResetDate: string;
@@ -33,7 +93,7 @@ export interface SaaSUser {
 export interface SaaSTransaction {
   id: string;
   userEmail: string;
-  plan: "creator" | "enterprise";
+  plan: "creator" | "enterprise" | "pack_5" | "pack_25" | "pack_50";
   amount: number;
   status: "completed" | "refunded";
   date: string;
@@ -46,6 +106,7 @@ export interface SaaSStoreData {
     creator: PlanConfig;
     enterprise: PlanConfig;
   };
+  oneTimePacks?: OneTimePack[];
   paypalSettings: PayPalSettings;
   users: SaaSUser[];
   transactions: SaaSTransaction[];
@@ -59,6 +120,7 @@ if (!fs.existsSync(DATA_DIR)) {
 }
 
 const DEFAULT_STORE: SaaSStoreData = {
+  oneTimePacks: ONE_TIME_PACKS,
   plans: {
     free: {
       name: "Free Starter",
@@ -184,7 +246,11 @@ function loadStore(): SaaSStoreData {
   try {
     if (fs.existsSync(STORE_PATH)) {
       const raw = fs.readFileSync(STORE_PATH, "utf-8");
-      return JSON.parse(raw);
+      const data = JSON.parse(raw);
+      if (!data.oneTimePacks || !Array.isArray(data.oneTimePacks) || data.oneTimePacks.length === 0) {
+        data.oneTimePacks = ONE_TIME_PACKS;
+      }
+      return data;
     }
   } catch (e) {
     console.error("Error reading SaaS store, using default:", e);
@@ -206,11 +272,12 @@ export const saasDb = {
     const store = loadStore();
     return {
       plans: store.plans,
+      oneTimePacks: store.oneTimePacks || ONE_TIME_PACKS,
       paypalSettings: store.paypalSettings
     };
   },
 
-  updateConfig(updates: Partial<{ plans: SaaSStoreData["plans"]; paypalSettings: PayPalSettings }>) {
+  updateConfig(updates: Partial<{ plans: SaaSStoreData["plans"]; oneTimePacks: OneTimePack[]; paypalSettings: PayPalSettings }>) {
     const store = loadStore();
     if (updates.plans) {
       store.plans = { ...store.plans, ...updates.plans };
@@ -219,6 +286,26 @@ export const saasDb = {
         if (updates.plans && updates.plans[u.tier]) {
           u.downloadsLimit = updates.plans[u.tier].downloadLimit;
         }
+      });
+    }
+    if (updates.oneTimePacks && Array.isArray(updates.oneTimePacks)) {
+      store.oneTimePacks = updates.oneTimePacks.map((p) => {
+        const credits = Math.max(1, Number(p.videoCredits) || 1);
+        const price = Math.max(1, Number(p.price) || 1);
+        const unitPrice = (price / credits).toFixed(2);
+        return {
+          ...p,
+          name: p.name || "Credit Pack",
+          price,
+          videoCredits: credits,
+          pricePerVideo: `$${unitPrice} / video`,
+          features: p.features || [
+            `${credits} video downloads included`,
+            "No monthly recurring commitment",
+            "Burnt-in logo & custom subtitles",
+            "Credits never expire"
+          ]
+        };
       });
     }
     if (updates.paypalSettings) {
@@ -231,7 +318,7 @@ export const saasDb = {
       }
     }
     saveStore(store);
-    return { plans: store.plans, paypalSettings: store.paypalSettings };
+    return { plans: store.plans, oneTimePacks: store.oneTimePacks, paypalSettings: store.paypalSettings };
   },
 
   getUser(email: string): SaaSUser {
@@ -334,15 +421,27 @@ export const saasDb = {
     };
   },
 
-  recordTransaction(userEmail: string, plan: "creator" | "enterprise", paypalOrderId?: string): SaaSTransaction {
+  recordTransaction(
+    userEmail: string,
+    plan: "creator" | "enterprise",
+    paypalOrderId?: string,
+    billingCycle: "monthly" | "annual" = "monthly"
+  ): SaaSTransaction {
     const store = loadStore();
     const planConfig = store.plans[plan];
+
+    // 20% discount for annual package
+    const baseMonthlyPrice = planConfig.price;
+    const finalAmount =
+      billingCycle === "annual"
+        ? Math.round(baseMonthlyPrice * 12 * 0.8) // 20% discount
+        : baseMonthlyPrice;
 
     const tx: SaaSTransaction = {
       id: `tx_${Date.now()}`,
       userEmail: userEmail.trim().toLowerCase(),
       plan,
-      amount: planConfig.price,
+      amount: finalAmount,
       status: "completed",
       date: new Date().toISOString(),
       paypalTransactionId: paypalOrderId || `PAYPAL_${Math.random().toString(36).substring(2, 10).toUpperCase()}`
@@ -353,13 +452,55 @@ export const saasDb = {
     const user = store.users.find((u) => u.email.toLowerCase() === userEmail.trim().toLowerCase());
     if (user) {
       user.tier = plan;
+      user.billingCycle = billingCycle;
       user.downloadsLimit = planConfig.downloadLimit;
       user.downloadsUsed = 0;
-      const cycleDays = planConfig.interval === "week" ? 7 : 30;
+      const cycleDays = billingCycle === "annual" ? 365 : planConfig.interval === "week" ? 7 : 30;
       user.cycleResetDate = new Date(Date.now() + cycleDays * 24 * 60 * 60 * 1000).toISOString();
     }
     saveStore(store);
     return tx;
+  },
+
+  buyOneTimePack(
+    userEmail: string,
+    packId: "pack_5" | "pack_25" | "pack_50",
+    paypalOrderId?: string
+  ): { user: SaaSUser; transaction: SaaSTransaction; pack: OneTimePack } {
+    const store = loadStore();
+    const activePacks = store.oneTimePacks && store.oneTimePacks.length > 0 ? store.oneTimePacks : ONE_TIME_PACKS;
+    const pack = activePacks.find((p) => p.id === packId);
+    if (!pack) {
+      throw new Error("Invalid one-time package ID");
+    }
+
+    const cleanEmail = userEmail.trim().toLowerCase();
+    let user = store.users.find((u) => u.email.toLowerCase() === cleanEmail);
+    if (!user) {
+      user = this.getUser(userEmail);
+    }
+
+    // Add video credits directly to user limit (lifetime, no expiration)
+    user.downloadsLimit += pack.videoCredits;
+    // If user was on free tier, enable creator features (batch exports, no watermark)
+    if (user.tier === "free") {
+      user.tier = "creator";
+    }
+
+    const tx: SaaSTransaction = {
+      id: `tx_pack_${Date.now()}`,
+      userEmail: cleanEmail,
+      plan: packId,
+      amount: pack.price,
+      status: "completed",
+      date: new Date().toISOString(),
+      paypalTransactionId: paypalOrderId || `PAYPAL_PACK_${Math.random().toString(36).substring(2, 10).toUpperCase()}`
+    };
+
+    store.transactions.unshift(tx);
+    saveStore(store);
+
+    return { user, transaction: tx, pack };
   },
 
   getAdminOverview() {
@@ -380,6 +521,7 @@ export const saasDb = {
         activePlansCount: Object.keys(store.plans).length
       },
       plans: store.plans,
+      oneTimePacks: store.oneTimePacks && store.oneTimePacks.length > 0 ? store.oneTimePacks : ONE_TIME_PACKS,
       paypalSettings: store.paypalSettings,
       users: store.users,
       transactions: store.transactions

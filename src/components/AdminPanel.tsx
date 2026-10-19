@@ -14,11 +14,15 @@ import {
   Search,
   Sliders
 } from "lucide-react";
-import { AdminOverview, PlanConfig, PayPalSettings } from "../types";
+import { AdminOverview, PlanConfig, PayPalSettings, OneTimePack, DEFAULT_ONE_TIME_PACKS } from "../types";
 
 interface AdminPanelProps {
   overview: AdminOverview;
-  onUpdateConfig: (newPlans: AdminOverview["plans"], paypalSettings: PayPalSettings) => Promise<void>;
+  onUpdateConfig: (
+    newPlans: AdminOverview["plans"],
+    paypalSettings: PayPalSettings,
+    newPacks?: OneTimePack[]
+  ) => Promise<void>;
   onUpdateUser: (email: string, tier?: "free" | "creator" | "enterprise", resetDownloads?: boolean) => Promise<void>;
 }
 
@@ -29,6 +33,11 @@ export function AdminPanel({
 }: AdminPanelProps) {
   const [plans, setPlans] = useState(overview.plans);
   const [paypalSettings, setPaypalSettings] = useState(overview.paypalSettings);
+  const [packs, setPacks] = useState<OneTimePack[]>(
+    overview.oneTimePacks && overview.oneTimePacks.length > 0
+      ? overview.oneTimePacks
+      : DEFAULT_ONE_TIME_PACKS
+  );
   const [savingStatus, setSavingStatus] = useState<string | null>(null);
   const [userSearch, setUserSearch] = useState("");
   const [activeTab, setActiveTab] = useState<"pricing" | "paypal" | "transactions" | "users">("pricing");
@@ -37,7 +46,7 @@ export function AdminPanel({
     e.preventDefault();
     setSavingStatus("Saving configuration...");
     try {
-      await onUpdateConfig(plans, paypalSettings);
+      await onUpdateConfig(plans, paypalSettings, packs);
       setSavingStatus("Saved successfully!");
       setTimeout(() => setSavingStatus(null), 3000);
     } catch (err) {
@@ -276,6 +285,155 @@ export function AdminPanel({
                   }
                   className="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800"
                 />
+              </div>
+            </div>
+          </div>
+
+          {/* Annual Packages (20% Discount) & One-Time Packs Oversight */}
+          <div className="pt-4 border-t border-slate-200/80 space-y-4">
+            <h4 className="font-display font-bold text-xs text-slate-800 uppercase tracking-wider">
+              Automatic 20% Annual Discount Calculations
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+              <div className="p-3 bg-violet-50/50 border border-violet-200 rounded-xl space-y-1">
+                <span className="font-bold text-violet-900">Creator Annual Package</span>
+                <div className="text-slate-700 font-mono font-bold text-sm">
+                  ${Math.round(plans.creator.price * 12 * 0.8)} / year (Saves ${Math.round(plans.creator.price * 12 * 0.2)} / yr)
+                </div>
+                <div className="text-[11px] text-slate-500">
+                  Equivalent to ${(Math.round(plans.creator.price * 12 * 0.8) / 12).toFixed(2)}/mo • 420 videos/yr
+                </div>
+              </div>
+
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
+                <span className="font-bold text-slate-800">Enterprise Annual Package</span>
+                <div className="text-slate-700 font-mono font-bold text-sm">
+                  ${Math.round(plans.enterprise.price * 12 * 0.8)} / year (Saves ${Math.round(plans.enterprise.price * 12 * 0.2)} / yr)
+                </div>
+                <div className="text-[11px] text-slate-500">
+                  Equivalent to ${(Math.round(plans.enterprise.price * 12 * 0.8) / 12).toFixed(2)}/mo • 4,800 videos/yr
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-slate-200/80 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                <div>
+                  <h4 className="font-display font-bold text-xs text-slate-800 uppercase tracking-wider">
+                    One-Time Credit Packs (Pay-As-You-Go • Never Expire)
+                  </h4>
+                  <p className="text-[11px] text-slate-500">
+                    Edit the prices ($) and video download amounts for all one-time credit packs.
+                  </p>
+                </div>
+                <span className="text-[10px] font-bold text-violet-700 bg-violet-50 border border-violet-200 px-2.5 py-0.5 rounded-full w-fit">
+                  Live Dynamic Quotas
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {packs.map((pack, idx) => {
+                  const unitPrice = pack.videoCredits > 0 ? (pack.price / pack.videoCredits).toFixed(2) : "0.00";
+                  return (
+                    <div
+                      key={pack.id}
+                      className={`rounded-xl p-4 space-y-3 border transition-all ${
+                        pack.popular
+                          ? "bg-violet-50/50 border-violet-300 ring-2 ring-violet-200 shadow-xs"
+                          : "bg-white border-slate-200 shadow-2xs"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-xs text-slate-800 uppercase">
+                          Package #{idx + 1}
+                        </span>
+                        <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100/80 px-2 py-0.5 rounded-md border border-emerald-200">
+                          ~${unitPrice} / video
+                        </span>
+                      </div>
+
+                      <div>
+                        <label className="text-[11px] font-semibold text-slate-600 block mb-1">
+                          Pack Name
+                        </label>
+                        <input
+                          type="text"
+                          value={pack.name}
+                          onChange={(e) => {
+                            const updated = [...packs];
+                            updated[idx] = { ...updated[idx], name: e.target.value };
+                            setPacks(updated);
+                          }}
+                          className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 font-semibold focus:outline-violet-500"
+                          placeholder="Pack Name"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[11px] font-semibold text-slate-600 block mb-1">
+                            Price ($ USD)
+                          </label>
+                          <input
+                            type="number"
+                            min="1"
+                            value={pack.price}
+                            onChange={(e) => {
+                              const updated = [...packs];
+                              const newPrice = Math.max(1, parseInt(e.target.value) || 1);
+                              updated[idx] = {
+                                ...updated[idx],
+                                price: newPrice,
+                                pricePerVideo: `$${(newPrice / updated[idx].videoCredits).toFixed(2)} / video`
+                              };
+                              setPacks(updated);
+                            }}
+                            className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 font-bold focus:outline-violet-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-[11px] font-semibold text-slate-600 block mb-1">
+                            Video Downloads
+                          </label>
+                          <input
+                            type="number"
+                            min="1"
+                            value={pack.videoCredits}
+                            onChange={(e) => {
+                              const updated = [...packs];
+                              const newCredits = Math.max(1, parseInt(e.target.value) || 1);
+                              updated[idx] = {
+                                ...updated[idx],
+                                videoCredits: newCredits,
+                                pricePerVideo: `$${(updated[idx].price / newCredits).toFixed(2)} / video`
+                              };
+                              setPacks(updated);
+                            }}
+                            className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 font-bold focus:outline-violet-500"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-[11px] font-semibold text-slate-600 block mb-1">
+                          Promo Tag / Badge (Optional)
+                        </label>
+                        <input
+                          type="text"
+                          value={pack.badge || ""}
+                          onChange={(e) => {
+                            const updated = [...packs];
+                            updated[idx] = { ...updated[idx], badge: e.target.value };
+                            setPacks(updated);
+                          }}
+                          className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1 text-[11px] text-slate-700 focus:outline-violet-500"
+                          placeholder="e.g. Most Popular"
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>

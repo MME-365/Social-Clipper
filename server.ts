@@ -750,13 +750,26 @@ app.post("/api/saas/track-download", (req, res) => {
 });
 
 app.post("/api/saas/upgrade", (req, res) => {
-  const { email = "demo@user.com", plan = "creator", paypalOrderId } = req.body;
+  const { email = "demo@user.com", plan = "creator", paypalOrderId, billingCycle = "monthly" } = req.body;
   if (plan !== "creator" && plan !== "enterprise") {
     return res.status(400).json({ error: "Invalid plan" });
   }
-  const tx = saasDb.recordTransaction(email, plan, paypalOrderId);
+  const tx = saasDb.recordTransaction(email, plan, paypalOrderId, billingCycle);
   const updatedUser = saasDb.getUser(email);
   res.json({ success: true, transaction: tx, user: updatedUser });
+});
+
+app.post("/api/saas/buy-pack", (req, res) => {
+  try {
+    const { email = "demo@user.com", packId, paypalOrderId } = req.body;
+    if (packId !== "pack_5" && packId !== "pack_25" && packId !== "pack_50") {
+      return res.status(400).json({ error: "Invalid package ID. Choose $5 (12 videos), $25 (65 videos), or $50 (135 videos)." });
+    }
+    const result = saasDb.buyOneTimePack(email, packId, paypalOrderId);
+    res.json({ success: true, ...result });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to process one-time pack" });
+  }
 });
 
 app.get("/api/saas/admin/overview", (req, res) => {

@@ -1,6 +1,6 @@
 import { useState, FormEvent } from "react";
 import { User, Shield, Zap, Clock, Check, AlertCircle, ArrowUpRight, RefreshCw, Film, ExternalLink, LogIn, TrendingUp } from "lucide-react";
-import { SaaSUser, PlanConfig, PayPalSettings } from "../types";
+import { SaaSUser, PlanConfig, PayPalSettings, OneTimePack, DEFAULT_ONE_TIME_PACKS } from "../types";
 import { MarketComparison } from "./MarketComparison";
 
 interface UserDashboardProps {
@@ -11,7 +11,9 @@ interface UserDashboardProps {
     enterprise: PlanConfig;
   };
   paypalSettings: PayPalSettings;
-  onUpgrade: (plan: "creator" | "enterprise") => void;
+  oneTimePacks?: OneTimePack[];
+  onUpgrade: (plan: "creator" | "enterprise", billingCycle?: "monthly" | "annual") => void;
+  onBuyPack?: (packId: "pack_5" | "pack_25" | "pack_50") => void;
   onSwitchUserEmail: (email: string) => void;
   onOpenStudio: () => void;
   onOpenHome: () => void;
@@ -21,7 +23,9 @@ export function UserDashboard({
   user,
   plans,
   paypalSettings,
+  oneTimePacks,
   onUpgrade,
+  onBuyPack,
   onSwitchUserEmail,
   onOpenStudio,
   onOpenHome
@@ -30,7 +34,8 @@ export function UserDashboard({
   const [isSwitching, setIsSwitching] = useState(false);
   const [showMarketComparison, setShowMarketComparison] = useState(false);
 
-  const currentPlan = plans[user.tier];
+  const isPackTier = user.tier === "pack";
+  const currentPlan = (plans[user.tier as "free" | "creator" | "enterprise"]) || plans.creator;
   const percentUsed = Math.min(100, Math.round((user.downloadsUsed / user.downloadsLimit) * 100));
   const remaining = Math.max(0, user.downloadsLimit - user.downloadsUsed);
 
@@ -58,10 +63,17 @@ export function UserDashboard({
                   ? "bg-slate-900 text-white"
                   : user.tier === "creator"
                   ? "bg-violet-600 text-white"
+                  : isPackTier
+                  ? "bg-emerald-600 text-white"
                   : "bg-slate-100 text-slate-700"
               }`}>
-                {currentPlan.name}
+                {isPackTier ? "One-Time Credit Pack" : currentPlan.name}
               </span>
+              {user.billingCycle === "annual" && (
+                <span className="text-[10px] font-extrabold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full uppercase">
+                  Annual 20% Off
+                </span>
+              )}
             </div>
             <p className="text-xs text-slate-500 font-mono mt-0.5">
               {user.email} <span aria-hidden="true">·</span> Member since {new Date(user.joinedDate).toLocaleDateString()}
@@ -136,11 +148,19 @@ export function UserDashboard({
               Download Quota & Usage
             </h3>
             <p className="text-xs text-slate-500">
-              Track remaining video downloads for your current {currentPlan.interval}ly billing cycle.
+              {isPackTier
+                ? "One-Time Credit Pack: Video downloads never expire and carry over permanently."
+                : `Track remaining video downloads for your current ${currentPlan.interval}ly billing cycle.`}
             </p>
           </div>
           <div className="text-xs font-mono font-semibold text-slate-700">
-            Resets on: <span className="text-violet-700">{new Date(user.cycleResetDate).toLocaleDateString()}</span>
+            {isPackTier ? (
+              <span className="text-emerald-700 font-bold">Credits Never Expire</span>
+            ) : (
+              <>
+                Resets on: <span className="text-violet-700">{new Date(user.cycleResetDate).toLocaleDateString()}</span>
+              </>
+            )}
           </div>
         </div>
 
@@ -151,7 +171,7 @@ export function UserDashboard({
               Used {user.downloadsUsed} of {user.downloadsLimit} downloads ({percentUsed}%)
             </span>
             <span className={remaining === 0 ? "text-rose-600 font-bold" : "text-emerald-700"}>
-              {remaining} remaining {user.tier === "free" ? "this week" : "this month"}
+              {remaining} remaining {isPackTier ? "(Lifetime Credits)" : user.tier === "free" ? "this week" : "this cycle"}
             </span>
           </div>
 
@@ -173,7 +193,7 @@ export function UserDashboard({
           <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-start gap-2">
             <AlertCircle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
             <p>
-              You have used all {user.downloadsLimit} downloads for your current plan cycle. Upgrade below to immediately unlock additional volume!
+              You have used all {user.downloadsLimit} downloads. Grab a one-time pack ($5 for 12, $25 for 65, $50 for 135) or upgrade to Annual (20% off) below to unlock additional volume immediately!
             </p>
           </div>
         )}
@@ -185,77 +205,108 @@ export function UserDashboard({
         <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-xs space-y-4">
           <h3 className="font-display font-bold text-sm text-slate-900 flex items-center gap-2">
             <Shield className="h-4 w-4 text-violet-600" />
-            Current Plan Inclusions
+            <span>Current Inclusions</span>
           </h3>
 
           <ul className="space-y-2.5 text-xs text-slate-700">
-            {currentPlan.features.map((feat, i) => (
-              <li key={i} className="flex items-start gap-2">
-                <Check className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
-                <span>{feat}</span>
-              </li>
-            ))}
+            {isPackTier ? (
+              <>
+                <li className="flex items-start gap-2">
+                  <Check className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+                  <span>Lifetime video download balance (Never expire)</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <Check className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+                  <span>Batch (5-at-once) multi-clip export enabled</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <Check className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+                  <span>Burnt-in channel logo watermark & custom subtitles</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <Check className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+                  <span>High-speed 4K MP4 rendering & direct mobile share</span>
+                </li>
+              </>
+            ) : (
+              currentPlan.features.map((feat, i) => (
+                <li key={i} className="flex items-start gap-2">
+                  <Check className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+                  <span>{feat}</span>
+                </li>
+              ))
+            )}
           </ul>
 
           <div className="pt-2 border-t border-slate-100 text-xs text-slate-500 space-y-1">
-            <div>Batch (5-at-once) downloads: <strong>{currentPlan.allowBatch ? "Enabled" : "Locked (Paid only)"}</strong></div>
+            <div>Batch (5-at-once) downloads: <strong>{isPackTier || currentPlan.allowBatch ? "Enabled" : "Locked (Paid only)"}</strong></div>
             <div>Lifetime videos processed: <strong>{user.totalVideosProcessed} videos</strong></div>
           </div>
         </div>
 
-        {/* Upgrade Card */}
+        {/* Upgrade & Quick Top Up Card */}
         <div className="bg-gradient-to-br from-violet-900 to-indigo-950 text-white rounded-2xl p-6 shadow-md flex flex-col justify-between space-y-6">
           <div className="space-y-3">
             <div className="inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-violet-400/20 text-violet-200">
               <Zap className="h-3.5 w-3.5 text-amber-300" />
-              <span>Scale Your Output</span>
+              <span>Add Credits or Upgrade</span>
             </div>
 
             <h3 className="font-display font-bold text-xl text-white">
-              {user.tier === "free" ? "Upgrade to Creator Tier" : "Need More Volume? Get Enterprise"}
+              {user.tier === "free"
+                ? "Upgrade or Grab Video Credits"
+                : "Top Up Credits or Save 20% on Annual"}
             </h3>
 
             <p className="text-xs text-violet-200/90 leading-relaxed">
-              {user.tier === "free"
-                ? "Unlock 35 videos/month, batch multi-clip downloads, full 9:16 video exports, and priority rendering for just $9/mo."
-                : "Get 400 videos/month with enterprise priority rendering pipeline for $99/mo."}
+              Unlock batch downloads, full 9:16 video exports, and priority 4K rendering with zero waiting time.
             </p>
           </div>
 
-          <div className="space-y-2">
-            {user.tier === "free" ? (
-              <button
-                type="button"
-                onClick={() => onUpgrade("creator")}
-                className="w-full py-3 rounded-xl bg-violet-500 hover:bg-violet-400 text-white font-bold text-xs uppercase tracking-wider transition cursor-pointer shadow-sm"
-              >
-                Upgrade to Creator ($9 / month)
-              </button>
-            ) : user.tier === "creator" ? (
-              <button
-                type="button"
-                onClick={() => onUpgrade("enterprise")}
-                className="w-full py-3 rounded-xl bg-violet-500 hover:bg-violet-400 text-white font-bold text-xs uppercase tracking-wider transition cursor-pointer shadow-sm"
-              >
-                Upgrade to Enterprise ($99 / month)
-              </button>
-            ) : (
-              <div className="text-center text-xs text-emerald-300 font-semibold py-2">
-                ✓ You are on the top-tier Enterprise Plan (400 videos/mo)
+          <div className="space-y-3">
+            {/* Quick One-Time Pack Buttons */}
+            {onBuyPack && (
+              <div className="p-3 bg-white/10 rounded-xl border border-white/15 space-y-2">
+                <div className="text-[11px] font-bold text-violet-200 uppercase tracking-wider">
+                  ⚡ Quick Top-Up (One-Time • Never Expire):
+                </div>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {(oneTimePacks && oneTimePacks.length > 0 ? oneTimePacks : DEFAULT_ONE_TIME_PACKS).map((pack) => (
+                    <button
+                      key={pack.id}
+                      type="button"
+                      onClick={() => onBuyPack(pack.id)}
+                      className={`py-1.5 px-2 rounded-lg font-bold text-xs transition cursor-pointer text-center ${
+                        pack.popular
+                          ? "bg-violet-500 hover:bg-violet-400 text-white"
+                          : pack.id === "pack_50"
+                          ? "bg-emerald-600 hover:bg-emerald-500 text-white"
+                          : "bg-white/20 hover:bg-white/30 text-white"
+                      }`}
+                    >
+                      {pack.videoCredits} Vids • ${pack.price}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
 
-            {user.tier === "free" && paypalSettings.creatorPayPalLink && (
-              <a
-                href={paypalSettings.creatorPayPalLink}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[11px] text-violet-200 hover:underline flex items-center justify-center gap-1 text-center"
+            <div className="flex flex-col sm:flex-row gap-2">
+              <button
+                type="button"
+                onClick={() => onUpgrade("creator", "annual")}
+                className="flex-1 py-2.5 px-3 rounded-xl bg-violet-500 hover:bg-violet-400 text-white font-bold text-xs uppercase tracking-wider transition cursor-pointer shadow-sm text-center"
               >
-                <span>Checkout with PayPal link</span>
-                <ExternalLink className="h-3 w-3" />
-              </a>
-            )}
+                Creator Annual ($86/yr - 20% Off)
+              </button>
+              <button
+                type="button"
+                onClick={() => onUpgrade("enterprise", "annual")}
+                className="flex-1 py-2.5 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs uppercase tracking-wider transition cursor-pointer shadow-sm text-center"
+              >
+                Enterprise Annual ($950/yr)
+              </button>
+            </div>
           </div>
         </div>
       </div>

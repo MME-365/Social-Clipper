@@ -315,15 +315,15 @@ export function MarketComparison({ onOpenPricing, onOpenStudio }: MarketComparis
                     Feature Added & Fully Live 🚀
                   </span>
                   <h3 className="font-display font-bold text-sm text-slate-900 flex items-center gap-1.5">
-                    Burned-In Animated Karaoke Subtitles
+                    Burnt-In Logos & Single-Phrase Subtitles
                   </h3>
                 </div>
               </div>
               <p className="text-xs text-slate-600 leading-relaxed">
-                <strong>What competitors charge $19-$49 for:</strong> Burning animated subtitles (Alex Hormozi style with bouncing words, fluorescent yellow highlights, and glowing strokes) directly onto video frames.
+                <strong>What competitors charge $19-$49 for:</strong> Burning logos, watermarks, and animated captions directly onto video frames.
               </p>
               <div className="text-xs text-emerald-800 bg-emerald-50 p-3 rounded-lg border border-emerald-200 font-medium">
-                <strong>Now Live in SocialClipper:</strong> Built right in! Choose between <strong>Hormozi Bouncy Pop</strong>, <strong>Cyberpunk Neon</strong>, <strong>Flame Gradient</strong>, or <strong>Clean Studio</strong>. See real-time previews on the 9:16 phone screen, and burn text directly into the canvas/MP4 download!
+                <strong>Now Live in SocialClipper:</strong> Built right in! Burn your channel handle or image watermark in any corner, customize single-phrase hook subtitles with user-generated lyric editing, and bake everything directly into the 9:16 MP4 download!
               </div>
             </div>
 

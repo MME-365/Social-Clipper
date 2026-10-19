@@ -85,6 +85,68 @@ export interface AspectRatioOption {
   icon: string;
 }
 
+export interface OneTimePack {
+  id: "pack_5" | "pack_25" | "pack_50";
+  name: string;
+  price: number;
+  videoCredits: number;
+  pricePerVideo: string;
+  badge?: string;
+  popular?: boolean;
+  features: string[];
+}
+
+export const DEFAULT_ONE_TIME_PACKS: OneTimePack[] = [
+  {
+    id: "pack_5",
+    name: "Starter Pack",
+    price: 5,
+    videoCredits: 12,
+    pricePerVideo: "$0.41 / video",
+    badge: "Quick Start",
+    features: [
+      "12 Video Downloads included",
+      "Credits never expire (lifetime)",
+      "Burnt-in logo watermark & custom subtitles",
+      "No recurring monthly subscription",
+      "Instant 4K MP4 export & mobile share"
+    ]
+  },
+  {
+    id: "pack_25",
+    name: "Creator Booster Pack",
+    price: 25,
+    videoCredits: 65,
+    pricePerVideo: "$0.38 / video",
+    popular: true,
+    badge: "Most Popular Pack",
+    features: [
+      "65 Video Downloads included",
+      "Batch 5-clip simultaneous download",
+      "Full video 9:16 master export",
+      "Credits never expire (lifetime)",
+      "Priority processing queue",
+      "No recurring monthly subscription"
+    ]
+  },
+  {
+    id: "pack_50",
+    name: "Power Studio Vault",
+    price: 50,
+    videoCredits: 135,
+    pricePerVideo: "$0.37 / video",
+    badge: "Best Value / 48% Savings",
+    features: [
+      "135 Video Downloads included",
+      "Lowest cost per clip in the market ($0.37)",
+      "Batch multi-clip & full-length export",
+      "Commercial licensing included",
+      "Priority GPU server rendering pipeline",
+      "Credits never expire (lifetime)"
+    ]
+  }
+];
+
 export interface PlanConfig {
   name: string;
   price: number;
@@ -106,7 +168,8 @@ export interface SaaSUser {
   id: string;
   email: string;
   name: string;
-  tier: "free" | "creator" | "enterprise";
+  tier: "free" | "creator" | "enterprise" | "pack";
+  billingCycle?: "monthly" | "annual";
   downloadsUsed: number;
   downloadsLimit: number;
   cycleResetDate: string;
@@ -117,7 +180,7 @@ export interface SaaSUser {
 export interface SaaSTransaction {
   id: string;
   userEmail: string;
-  plan: "creator" | "enterprise";
+  plan: "creator" | "enterprise" | "pack_5" | "pack_25" | "pack_50";
   amount: number;
   status: "completed" | "refunded";
   date: string;
@@ -137,6 +200,7 @@ export interface AdminOverview {
     creator: PlanConfig;
     enterprise: PlanConfig;
   };
+  oneTimePacks?: OneTimePack[];
   paypalSettings: PayPalSettings;
   users: SaaSUser[];
   transactions: SaaSTransaction[];
