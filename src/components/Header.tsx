@@ -23,13 +23,15 @@ interface HeaderProps {
   onNavigate: (view: "studio" | "landing" | "dashboard" | "admin") => void;
   currentUser: SaaSUser;
   onOpenUpgradeModal: () => void;
+  onLogout?: () => void;
 }
 
 export function Header({
   currentView,
   onNavigate,
   currentUser,
-  onOpenUpgradeModal
+  onOpenUpgradeModal,
+  onLogout
 }: HeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -298,6 +300,20 @@ export function Header({
                 >
                   <User className="h-4 w-4 text-slate-400" />
                   <span>Switch User / Sign In</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onLogout) {
+                      onLogout();
+                    }
+                    setMenuOpen(false);
+                  }}
+                  className="w-full px-4 py-2 text-left font-semibold text-rose-600 hover:bg-rose-50 flex items-center gap-2.5 transition cursor-pointer border-t border-slate-100 mt-1 pt-2"
+                >
+                  <LogOut className="h-4 w-4 text-rose-500" />
+                  <span>Log Out</span>
                 </button>
               </div>
             </div>
