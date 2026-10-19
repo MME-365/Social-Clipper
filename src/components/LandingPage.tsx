@@ -358,9 +358,9 @@ export function LandingPage({
 
               return (
                 <div className="bg-white border-2 border-violet-600 rounded-2xl p-6 shadow-md shadow-violet-500/10 flex flex-col justify-between space-y-6 relative ring-4 ring-violet-50">
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-violet-600 text-white text-[11px] font-bold px-3 py-0.5 rounded-full uppercase tracking-wider shadow-sm flex items-center gap-1">
+                  <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-violet-600 text-white text-[11px] sm:text-xs font-extrabold px-6 sm:px-8 py-1.5 rounded-full uppercase tracking-wider shadow-md flex items-center justify-center gap-1.5 whitespace-nowrap min-w-[210px] sm:min-w-[230px] border border-violet-400/30">
                     <span>Most Popular</span>
-                    {isAnnual && <span>• 20% OFF</span>}
+                    {isAnnual && <span className="text-violet-200 font-black">• 20% OFF</span>}
                   </div>
 
                   <div className="space-y-4">
