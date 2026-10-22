@@ -12,9 +12,12 @@ import {
   ExternalLink,
   ShieldCheck,
   Search,
-  Sliders
+  Sliders,
+  Sparkles,
+  Globe,
+  Trash2
 } from "lucide-react";
-import { AdminOverview, PlanConfig, PayPalSettings, OneTimePack, DEFAULT_ONE_TIME_PACKS } from "../types";
+import { AdminOverview, PlanConfig, PayPalSettings, OneTimePack, DEFAULT_ONE_TIME_PACKS, CreatorToolAd } from "../types";
 
 interface AdminPanelProps {
   overview: AdminOverview;
@@ -24,12 +27,14 @@ interface AdminPanelProps {
     newPacks?: OneTimePack[]
   ) => Promise<void>;
   onUpdateUser: (email: string, tier?: "free" | "creator" | "enterprise", resetDownloads?: boolean) => Promise<void>;
+  onRefreshAds?: () => void;
 }
 
 export function AdminPanel({
   overview,
   onUpdateConfig,
-  onUpdateUser
+  onUpdateUser,
+  onRefreshAds
 }: AdminPanelProps) {
   const [plans, setPlans] = useState(overview.plans);
   const [paypalSettings, setPaypalSettings] = useState(overview.paypalSettings);
@@ -38,9 +43,10 @@ export function AdminPanel({
       ? overview.oneTimePacks
       : DEFAULT_ONE_TIME_PACKS
   );
+  const [ads, setAds] = useState<CreatorToolAd[]>(overview.creatorAds || []);
   const [savingStatus, setSavingStatus] = useState<string | null>(null);
   const [userSearch, setUserSearch] = useState("");
-  const [activeTab, setActiveTab] = useState<"pricing" | "paypal" | "transactions" | "users">("pricing");
+  const [activeTab, setActiveTab] = useState<"pricing" | "paypal" | "transactions" | "users" | "creatorAds">("pricing");
 
   const handleSaveConfig = async (e: FormEvent) => {
     e.preventDefault();
@@ -178,6 +184,19 @@ export function AdminPanel({
         >
           <Users className="h-3.5 w-3.5" />
           <span>User Accounts ({overview.users.length})</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("creatorAds")}
+          className={`pb-3 px-4 border-b-2 transition cursor-pointer flex items-center gap-1.5 ${
+            activeTab === "creatorAds"
+              ? "border-violet-600 text-violet-600"
+              : "border-transparent text-slate-500 hover:text-slate-800"
+          }`}
+        >
+          <Sparkles className="h-3.5 w-3.5 text-amber-500" />
+          <span>Creator Tool Ads ({ads.length})</span>
         </button>
       </div>
 
@@ -660,6 +679,92 @@ export function AdminPanel({
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Tab 5: Creator Tool Ads Management ($150 / 30 Days) */}
+      {activeTab === "creatorAds" && (
+        <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-xs space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+            <div>
+              <h3 className="font-display font-bold text-base text-slate-900 flex items-center gap-2">
+                <span>Featured Creator Tool Ads Spotlight</span>
+                <span className="text-[10px] font-extrabold bg-violet-100 text-violet-800 px-2 py-0.5 rounded-full uppercase">
+                  $150 / 30 Days
+                </span>
+              </h3>
+              <p className="text-xs text-slate-500">
+                Manage partner software tools, AI services, and apps showcased in the carousel above Market Intelligence.
+              </p>
+            </div>
+            <div className="text-xs text-slate-500 font-medium">
+              Total active ads: <strong className="text-slate-900">{ads.length}</strong>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {ads.map((ad) => (
+              <div
+                key={ad.id}
+                className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col justify-between space-y-3"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="h-16 w-28 bg-slate-950 rounded-lg p-2 flex items-center justify-center shrink-0 border border-slate-800">
+                    <img
+                      src={ad.logoUrl}
+                      alt={ad.name}
+                      className="max-h-full max-w-full object-contain"
+                    />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <h4 className="font-bold text-xs text-slate-900 truncate">{ad.name}</h4>
+                      {ad.badge && (
+                        <span className="text-[9px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.2 rounded shrink-0">
+                          {ad.badge}
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[10px] text-violet-700 font-semibold uppercase tracking-wider block">
+                      {ad.category}
+                    </span>
+                    <p className="text-[11px] text-slate-600 line-clamp-1">{ad.tagline}</p>
+                    <a
+                      href={ad.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[10px] text-violet-600 hover:underline flex items-center gap-1 mt-1 truncate"
+                    >
+                      <Globe className="h-2.5 w-2.5 shrink-0" />
+                      <span className="truncate">{ad.url}</span>
+                    </a>
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-slate-200/80 flex items-center justify-between text-[11px] text-slate-500">
+                  <div>
+                    <span>Advertiser: </span>
+                    <strong className="text-slate-700">{ad.advertiserEmail || "partner"}</strong>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (window.confirm(`Are you sure you want to remove ${ad.name} from the carousel?`)) {
+                        await fetch(`/api/saas/creator-ads/${ad.id}`, { method: "DELETE" });
+                        setAds(ads.filter((a) => a.id !== ad.id));
+                        if (onRefreshAds) onRefreshAds();
+                      }
+                    }}
+                    className="p-1 rounded-md text-rose-500 hover:bg-rose-50 transition cursor-pointer"
+                    title="Remove Ad"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}

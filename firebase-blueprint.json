@@ -1,0 +1,78 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Registered SaaS user profile and clipping account details",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Firebase Auth UID of the user",
+          "maxLength": 128
+        },
+        "email": {
+          "type": "string",
+          "description": "User email address",
+          "maxLength": 256
+        },
+        "name": {
+          "type": "string",
+          "description": "Display name of the user",
+          "maxLength": 128
+        },
+        "tier": {
+          "type": "string",
+          "description": "Subscription tier or pack status",
+          "enum": ["free", "creator", "enterprise", "pack"],
+          "maxLength": 32
+        },
+        "billingCycle": {
+          "type": "string",
+          "description": "Billing cadence",
+          "enum": ["monthly", "annual"],
+          "maxLength": 32
+        },
+        "downloadsUsed": {
+          "type": "number",
+          "description": "Number of clip downloads used in current billing cycle"
+        },
+        "downloadsLimit": {
+          "type": "number",
+          "description": "Max clip downloads permitted for tier"
+        },
+        "cycleResetDate": {
+          "type": "string",
+          "description": "Date ISO string when download quota resets",
+          "maxLength": 64
+        },
+        "joinedDate": {
+          "type": "string",
+          "description": "Date ISO string when user joined",
+          "maxLength": 64
+        },
+        "totalVideosProcessed": {
+          "type": "number",
+          "description": "Lifetime total videos analyzed and processed"
+        },
+        "avatarUrl": {
+          "type": "string",
+          "description": "Avatar URL",
+          "maxLength": 1024
+        },
+        "authProvider": {
+          "type": "string",
+          "description": "Authentication method used",
+          "enum": ["google", "local", "password"],
+          "maxLength": 32
+        }
+      },
+      "required": ["id", "email", "name", "tier", "downloadsUsed", "downloadsLimit"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Collection of private user profiles and subscription stats"
+    }
+  }
+}

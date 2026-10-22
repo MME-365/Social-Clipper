@@ -1,0 +1,71 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Admin users logged in via Google: customerservice.mme365@gmail.com, marketingmanagementenp.365@gmail.com
+    function isAdmin() {
+      return isSignedIn()
+        && request.auth.token.firebase.sign_in_provider == 'google.com'
+        && (
+          request.auth.token.email == 'customerservice.mme365@gmail.com'
+          || request.auth.token.email == 'marketingmanagementenp.365@gmail.com'
+          || (request.auth.token.email != null && (
+            request.auth.token.email.lower() == 'customerservice.mme365@gmail.com'
+            || request.auth.token.email.lower() == 'marketingmanagementenp.365@gmail.com'
+          ))
+        );
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['id', 'email', 'name', 'tier', 'downloadsUsed', 'downloadsLimit'])
+        && data.id is string && data.id.size() <= 128 && (data.id == request.auth.uid || isAdmin())
+        && data.email is string && data.email.size() <= 256
+        && data.name is string && data.name.size() <= 128
+        && data.tier in ['free', 'creator', 'enterprise', 'pack']
+        && data.downloadsUsed is number && data.downloadsUsed >= 0
+        && data.downloadsLimit is number && data.downloadsLimit >= 0
+        && (!('billingCycle' in data) || data.billingCycle in ['monthly', 'annual'])
+        && (!('cycleResetDate' in data) || (data.cycleResetDate is string && data.cycleResetDate.size() <= 64))
+        && (!('joinedDate' in data) || (data.joinedDate is string && data.joinedDate.size() <= 64))
+        && (!('totalVideosProcessed' in data) || data.totalVideosProcessed is number)
+        && (!('avatarUrl' in data) || (data.avatarUrl is string && data.avatarUrl.size() <= 1024))
+        && (!('authProvider' in data) || data.authProvider in ['google', 'local', 'password']);
+    }
+
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if (isSignedIn() && resource.data.id == request.auth.uid) || isAdmin();
+      allow create: if isValidId(userId) && isOwner(userId) && isValidUser(incoming()) && incoming().id == userId;
+      allow update: if isValidId(userId) && (isOwner(userId) || isAdmin()) && isValidUser(incoming())
+        && incoming().id == existing().id
+        && incoming().email == existing().email;
+      allow delete: if isValidId(userId) && (isOwner(userId) || isAdmin());
+    }
+  }
+}

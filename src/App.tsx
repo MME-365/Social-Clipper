@@ -19,7 +19,9 @@ import {
   Layers,
   Film,
   Zap,
-  Lock
+  Lock,
+  ShieldAlert,
+  LayoutDashboard
 } from "lucide-react";
 import { Header } from "./components/Header";
 import { UploadZone } from "./components/UploadZone";
@@ -29,14 +31,22 @@ import { LandingPage } from "./components/LandingPage";
 import { UserDashboard } from "./components/UserDashboard";
 import { AdminPanel } from "./components/AdminPanel";
 import { UpgradeModal } from "./components/UpgradeModal";
+import { AuthModal } from "./components/AuthModal";
 import { DownloadReadyModal, DownloadModalData } from "./components/DownloadReadyModal";
-import { VideoClip, AspectRatioType, SaaSUser, PlanConfig, PayPalSettings, AdminOverview, KaraokeConfig, LogoWatermarkConfig, OneTimePack, DEFAULT_ONE_TIME_PACKS } from "./types";
+import { CreatorAdModal } from "./components/CreatorAdModal";
+import { VideoClip, AspectRatioType, SaaSUser, PlanConfig, PayPalSettings, AdminOverview, KaraokeConfig, LogoWatermarkConfig, OneTimePack, DEFAULT_ONE_TIME_PACKS, CreatorToolAd, DEFAULT_CREATOR_TOOL_ADS } from "./types";
 import { KaraokeOverlay } from "./components/KaraokeOverlay";
 import { drawKaraokeSubtitles, drawBurntInLogo } from "./utils/karaokeRenderer";
+import { onAuthStateChanged, signOut } from "firebase/auth";
+import { auth, testFirestoreConnection } from "./firebase";
 
 export default function App() {
   // Navigation View: Home page is Pricing/Landing, Dashboard accessible from Home, Studio accessible from Dashboard
   const [currentView, setCurrentView] = useState<"studio" | "landing" | "dashboard" | "admin">("landing");
+
+  // Authentication Modal State
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [authModalMode, setAuthModalMode] = useState<"login" | "register">("login");
 
   // Download Ready & Share Drawer State (prevents cookie errors upon mobile/iframe downloads)
   const [downloadModalData, setDownloadModalData] = useState<DownloadModalData | null>(null);
@@ -116,6 +126,8 @@ export default function App() {
   });
 
   const [oneTimePacks, setOneTimePacks] = useState<OneTimePack[]>(DEFAULT_ONE_TIME_PACKS);
+  const [creatorAds, setCreatorAds] = useState<CreatorToolAd[]>(DEFAULT_CREATOR_TOOL_ADS);
+  const [adModalOpen, setAdModalOpen] = useState(false);
 
   const [adminOverview, setAdminOverview] = useState<AdminOverview | null>(null);
 
@@ -225,36 +237,85 @@ export default function App() {
   // Fetch initial SaaS data from server
   const fetchSaasData = async (userEmail: string = currentUser.email) => {
     try {
-      const [configRes, userRes, adminRes] = await Promise.all([
+      const cleanEmail = (userEmail || "").trim().toLowerCase();
+      const isAdminEmail = cleanEmail === "customerservice.mme365@gmail.com" || cleanEmail === "marketingmanagementenp.365@gmail.com";
+
+      const requests: Promise<Response>[] = [
         fetch("/api/saas/config"),
         fetch(`/api/saas/user?email=${encodeURIComponent(userEmail)}`),
-        fetch("/api/saas/admin/overview")
-      ]);
+        fetch("/api/saas/creator-ads")
+      ];
 
-      if (configRes.ok) {
+      if (isAdminEmail) {
+        requests.push(fetch(`/api/saas/admin/overview?email=${encodeURIComponent(userEmail)}&authProvider=google`));
+      }
+
+      const results = await Promise.all(requests);
+      const configRes = results[0];
+      const userRes = results[1];
+      const adsRes = results[2];
+      const adminRes = isAdminEmail ? results[3] : null;
+
+      if (configRes && configRes.ok) {
         const configData = await configRes.json();
         if (configData.plans) setSaasPlans(configData.plans);
         if (configData.oneTimePacks && configData.oneTimePacks.length > 0) setOneTimePacks(configData.oneTimePacks);
         if (configData.paypalSettings) setPaypalSettings(configData.paypalSettings);
       }
 
-      if (userRes.ok) {
+      if (userRes && userRes.ok) {
         const userData = await userRes.json();
         setCurrentUser(userData);
       }
 
-      if (adminRes.ok) {
+      if (adsRes && adsRes.ok) {
+        const adsData = await adsRes.json();
+        if (adsData.ads && Array.isArray(adsData.ads) && adsData.ads.length > 0) {
+          setCreatorAds(adsData.ads);
+        }
+      }
+
+      if (adminRes && adminRes.ok) {
         const adminData = await adminRes.json();
         setAdminOverview(adminData);
         if (adminData.oneTimePacks && adminData.oneTimePacks.length > 0) setOneTimePacks(adminData.oneTimePacks);
+        if (adminData.creatorAds && adminData.creatorAds.length > 0) setCreatorAds(adminData.creatorAds);
       }
     } catch (e) {
       console.warn("Error fetching SaaS config:", e);
     }
   };
 
-  useEffect(() => {
+  const handleBookCreatorAdSuccess = (newAd: CreatorToolAd) => {
+    setCreatorAds((prev) => [newAd, ...prev.filter((a) => a.id !== newAd.id)]);
+    setDownloadSuccessMsg(`🎉 Successfully launched 30-day ad spotlight for ${newAd.name}! Your tool is now live in the carousel.`);
+    setTimeout(() => setDownloadSuccessMsg(null), 6000);
     fetchSaasData();
+  };
+
+  useEffect(() => {
+    // Validate Firestore connection on boot (CRITICAL requirement from Firebase skill)
+    testFirestoreConnection();
+
+    try {
+      const savedEmail = localStorage.getItem("saas_active_user_email");
+      if (savedEmail) {
+        fetchSaasData(savedEmail);
+      } else {
+        fetchSaasData();
+      }
+    } catch {
+      fetchSaasData();
+    }
+
+    // Subscribe to Firebase Auth state
+    const unsubscribe = onAuthStateChanged(auth, (fbUser) => {
+      if (fbUser && fbUser.email) {
+        fetchSaasData(fbUser.email);
+      }
+    });
+
+    return () => unsubscribe();
   }, []);
 
   const getYoutubeId = (url: string): string | null => {
@@ -1051,6 +1112,40 @@ export default function App() {
     }
   };
 
+  // User Logout
+  const handleLogout = () => {
+    signOut(auth).catch(() => {});
+    try {
+      localStorage.removeItem("saas_active_user_email");
+    } catch {}
+    const guestUser: SaaSUser = {
+      id: "usr_guest_" + Date.now().toString(36),
+      email: "guest@user.com",
+      name: "Guest Creator",
+      tier: "free",
+      downloadsUsed: 0,
+      downloadsLimit: saasPlans.free.downloadLimit || 1,
+      cycleResetDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      joinedDate: new Date().toISOString(),
+      totalVideosProcessed: 0
+    };
+    setCurrentUser(guestUser);
+    setCurrentView("landing");
+    setDownloadSuccessMsg("🔒 You have been logged out successfully.");
+    setTimeout(() => setDownloadSuccessMsg(null), 4000);
+  };
+
+  // User Auth (Login/Register/Google) success
+  const handleAuthSuccess = (user: SaaSUser) => {
+    setCurrentUser(user);
+    try {
+      localStorage.setItem("saas_active_user_email", user.email);
+    } catch {}
+    setDownloadSuccessMsg(`🎉 Welcome, ${user.name}! You are signed in.`);
+    setTimeout(() => setDownloadSuccessMsg(null), 5000);
+    fetchSaasData(user.email);
+  };
+
   const formatTime = (secs: number) => {
     const m = Math.floor(secs / 60);
     const s = Math.floor(secs % 60);
@@ -1059,6 +1154,20 @@ export default function App() {
 
   const activeClip = clips[activeClipIndex];
   const currentPan = activeClip?.panOffset || 0;
+
+  // Determine user login and admin status
+  const isGuestOrDemo =
+    !currentUser?.email ||
+    currentUser.email === "guest@user.com" ||
+    currentUser.email === "demo@user.com";
+
+  const isLoggedIn = !isGuestOrDemo;
+
+  const isAdminGoogleUser =
+    isLoggedIn &&
+    currentUser.authProvider === "google" &&
+    (currentUser.email.trim().toLowerCase() === "customerservice.mme365@gmail.com" ||
+     currentUser.email.trim().toLowerCase() === "marketingmanagementenp.365@gmail.com");
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans">
@@ -1070,6 +1179,11 @@ export default function App() {
           setUpgradeReason("Choose a plan below to scale your video downloads and unlock batch 5-clip exports.");
           setUpgradeModalOpen(true);
         }}
+        onOpenAuthModal={(mode = "login") => {
+          setAuthModalMode(mode);
+          setAuthModalOpen(true);
+        }}
+        onLogout={handleLogout}
       />
 
       {/* VIEW 1: LANDING PAGE & PRICING (DEFAULT HOME PAGE) */}
@@ -1080,50 +1194,138 @@ export default function App() {
             paypalSettings={paypalSettings}
             currentUser={currentUser}
             oneTimePacks={oneTimePacks}
+            creatorAds={creatorAds}
+            onOpenAdModal={() => setAdModalOpen(true)}
             onSelectPlan={(plan, billingCycle) => {
               if (plan === "free") {
-                setCurrentView("dashboard");
+                if (isLoggedIn) {
+                  setCurrentView("dashboard");
+                } else {
+                  setAuthModalMode("register");
+                  setAuthModalOpen(true);
+                }
               } else {
                 handleUpgradeUser(plan, billingCycle);
               }
             }}
             onSelectPack={handleBuyPack}
-            onOpenDashboard={() => setCurrentView("dashboard")}
+            onOpenDashboard={() => {
+              if (isLoggedIn) {
+                setCurrentView("dashboard");
+              } else {
+                setAuthModalMode("login");
+                setAuthModalOpen(true);
+              }
+            }}
           />
         </main>
       )}
 
-      {/* VIEW 2: USER DASHBOARD (GATEWAY TO STUDIO) */}
+      {/* VIEW 2: USER DASHBOARD (GATEWAY TO STUDIO - STRICTLY FOR LOGGED IN USERS) */}
       {currentView === "dashboard" && (
         <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-6">
-          <UserDashboard
-            user={currentUser}
-            plans={saasPlans}
-            paypalSettings={paypalSettings}
-            oneTimePacks={oneTimePacks}
-            onUpgrade={handleUpgradeUser}
-            onBuyPack={handleBuyPack}
-            onSwitchUserEmail={(newEmail) => {
-              fetchSaasData(newEmail);
-            }}
-            onOpenStudio={() => setCurrentView("studio")}
-            onOpenHome={() => setCurrentView("landing")}
-          />
+          {isLoggedIn ? (
+            <UserDashboard
+              user={currentUser}
+              plans={saasPlans}
+              paypalSettings={paypalSettings}
+              oneTimePacks={oneTimePacks}
+              creatorAds={creatorAds}
+              onOpenAdModal={() => setAdModalOpen(true)}
+              onUpgrade={handleUpgradeUser}
+              onBuyPack={handleBuyPack}
+              onSwitchUserEmail={(newEmail) => {
+                fetchSaasData(newEmail);
+              }}
+              onOpenStudio={() => setCurrentView("studio")}
+              onOpenHome={() => setCurrentView("landing")}
+              onLogout={handleLogout}
+              onOpenAuthModal={(mode = "login") => {
+                setAuthModalMode(mode);
+                setAuthModalOpen(true);
+              }}
+            />
+          ) : (
+            <div className="bg-white rounded-3xl p-10 max-w-lg mx-auto border border-slate-200 shadow-xl text-center space-y-4 my-12 animate-fade-in">
+              <div className="h-14 w-14 rounded-2xl bg-violet-100 text-violet-700 flex items-center justify-center mx-auto">
+                <LayoutDashboard className="h-7 w-7" />
+              </div>
+              <h2 className="text-2xl font-black text-slate-900">Sign In to Access Dashboard</h2>
+              <p className="text-xs text-slate-600 leading-relaxed max-w-sm mx-auto">
+                The User Dashboard is exclusively available to signed-in creators. Please sign in with Google or create a free account with email & password to manage downloads and access studio tools.
+              </p>
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthModalMode("login");
+                    setAuthModalOpen(true);
+                  }}
+                  className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-bold text-xs shadow-md shadow-violet-500/20 transition cursor-pointer"
+                >
+                  Sign In with Google or Email
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCurrentView("landing")}
+                  className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition cursor-pointer"
+                >
+                  Return to Home
+                </button>
+              </div>
+            </div>
+          )}
         </main>
       )}
 
-      {/* VIEW 3: ADMIN PANEL */}
+      {/* VIEW 3: ADMIN PANEL (STRICTLY GOOGLE ADMINS) */}
       {currentView === "admin" && (
         <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-6">
-          {adminOverview ? (
-            <AdminPanel
-              overview={{ ...adminOverview, oneTimePacks }}
-              onUpdateConfig={handleAdminUpdateConfig}
-              onUpdateUser={handleAdminUpdateUser}
-            />
+          {isAdminGoogleUser ? (
+            adminOverview ? (
+              <AdminPanel
+                overview={{ ...adminOverview, oneTimePacks, creatorAds }}
+                onUpdateConfig={handleAdminUpdateConfig}
+                onUpdateUser={handleAdminUpdateUser}
+                onRefreshAds={fetchSaasData}
+              />
+            ) : (
+              <div className="text-center py-16 text-slate-500 text-xs">
+                Loading Admin Control Center...
+              </div>
+            )
           ) : (
-            <div className="text-center py-16 text-slate-500 text-xs">
-              Loading Admin Control Center...
+            <div className="bg-white rounded-3xl p-10 max-w-lg mx-auto border border-rose-200 shadow-xl text-center space-y-4 my-12 animate-fade-in">
+              <div className="h-14 w-14 rounded-2xl bg-rose-100 text-rose-700 flex items-center justify-center mx-auto">
+                <ShieldAlert className="h-7 w-7" />
+              </div>
+              <h2 className="text-2xl font-black text-slate-900">Admin Access Restricted</h2>
+              <p className="text-xs text-slate-600 leading-relaxed max-w-sm mx-auto">
+                The Admin Control Panel is strictly accessible only to administrator accounts logged in using Google:
+              </p>
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl font-mono text-xs text-slate-700 space-y-1 max-w-xs mx-auto">
+                <div>customerservice.mme365@gmail.com</div>
+                <div>marketingmanagementenp.365@gmail.com</div>
+              </div>
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthModalMode("login");
+                    setAuthModalOpen(true);
+                  }}
+                  className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-bold text-xs shadow-md shadow-violet-500/20 transition cursor-pointer"
+                >
+                  Sign In with Google Admin Account
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCurrentView("landing")}
+                  className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition cursor-pointer"
+                >
+                  Return to Home
+                </button>
+              </div>
             </div>
           )}
         </main>
@@ -1519,6 +1721,24 @@ export default function App() {
         isOpen={!!downloadModalData}
         onClose={() => setDownloadModalData(null)}
         data={downloadModalData}
+      />
+
+      {/* Authentication Modal (Simple Email/Password & Google 1-Click) */}
+      <AuthModal
+        isOpen={authModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+        initialMode={authModalMode}
+        currentUserEmail={currentUser.email}
+        onSuccess={handleAuthSuccess}
+      />
+
+      {/* Creator Tool Ad Spotlight Modal ($150 / 30-Day Cycle) */}
+      <CreatorAdModal
+        isOpen={adModalOpen}
+        onClose={() => setAdModalOpen(false)}
+        currentUser={currentUser}
+        paypalSettings={paypalSettings}
+        onSuccess={handleBookCreatorAdSuccess}
       />
 
       {/* Clean Footer */}

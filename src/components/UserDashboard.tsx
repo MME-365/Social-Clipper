@@ -1,6 +1,6 @@
 import { useState, FormEvent } from "react";
-import { User, Shield, Zap, Clock, Check, AlertCircle, ArrowUpRight, RefreshCw, Film, ExternalLink, LogIn, TrendingUp } from "lucide-react";
-import { SaaSUser, PlanConfig, PayPalSettings, OneTimePack, DEFAULT_ONE_TIME_PACKS } from "../types";
+import { User, Shield, Zap, Clock, Check, AlertCircle, ArrowUpRight, RefreshCw, Film, ExternalLink, LogIn, TrendingUp, LogOut, Sparkles, PlusCircle, Globe } from "lucide-react";
+import { SaaSUser, PlanConfig, PayPalSettings, OneTimePack, DEFAULT_ONE_TIME_PACKS, CreatorToolAd } from "../types";
 import { MarketComparison } from "./MarketComparison";
 
 interface UserDashboardProps {
@@ -12,11 +12,15 @@ interface UserDashboardProps {
   };
   paypalSettings: PayPalSettings;
   oneTimePacks?: OneTimePack[];
+  creatorAds?: CreatorToolAd[];
   onUpgrade: (plan: "creator" | "enterprise", billingCycle?: "monthly" | "annual") => void;
   onBuyPack?: (packId: "pack_5" | "pack_25" | "pack_50") => void;
   onSwitchUserEmail: (email: string) => void;
   onOpenStudio: () => void;
   onOpenHome: () => void;
+  onLogout?: () => void;
+  onOpenAuthModal?: (mode?: "login" | "register") => void;
+  onOpenAdModal?: () => void;
 }
 
 export function UserDashboard({
@@ -24,11 +28,15 @@ export function UserDashboard({
   plans,
   paypalSettings,
   oneTimePacks,
+  creatorAds = [],
   onUpgrade,
   onBuyPack,
   onSwitchUserEmail,
   onOpenStudio,
-  onOpenHome
+  onOpenHome,
+  onLogout,
+  onOpenAuthModal,
+  onOpenAdModal
 }: UserDashboardProps) {
   const [emailInput, setEmailInput] = useState(user.email);
   const [isSwitching, setIsSwitching] = useState(false);
@@ -103,11 +111,28 @@ export function UserDashboard({
           </button>
           <button
             type="button"
-            onClick={() => setIsSwitching(!isSwitching)}
+            onClick={() => {
+              if (onOpenAuthModal) {
+                onOpenAuthModal("login");
+              } else {
+                setIsSwitching(!isSwitching);
+              }
+            }}
             className="px-3 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold transition cursor-pointer"
           >
             Switch Account
           </button>
+          {onLogout && (
+            <button
+              type="button"
+              onClick={onLogout}
+              className="px-3 py-2 rounded-xl border border-rose-200 hover:bg-rose-50 text-rose-600 text-xs font-semibold transition cursor-pointer flex items-center gap-1.5"
+              title="Log out of this account"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+              <span>Log Out</span>
+            </button>
+          )}
           <button
             type="button"
             onClick={onOpenStudio}
@@ -309,6 +334,107 @@ export function UserDashboard({
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Creator Tool Ads in User Dashboard ($150 per 30 Days Cycle via PayPal) */}
+      <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-xs space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+          <div className="space-y-1">
+            <div className="inline-flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-wider text-violet-700 bg-violet-50 px-2.5 py-0.5 rounded-full border border-violet-100">
+              <Sparkles className="h-3 w-3 text-amber-500" />
+              <span>One-Time Service</span>
+            </div>
+            <h3 className="font-display font-bold text-base text-slate-900">
+              Creator Tool Ad Spotlight ($150 / 30 Days)
+            </h3>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Showcase your creator tool, SaaS, or plugin to thousands of video editors and musicians in our carousel above Market Intelligence.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={onOpenAdModal}
+            className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white font-bold text-xs shadow-xs transition flex items-center justify-center gap-2 cursor-pointer self-start sm:self-auto shrink-0"
+          >
+            <PlusCircle className="h-3.5 w-3.5" />
+            <span>Book 30-Day Ad ($150 via PayPal)</span>
+          </button>
+        </div>
+
+        {/* User Active Ads */}
+        {(() => {
+          const userAds = creatorAds.filter(
+            (a) => a.advertiserEmail?.toLowerCase() === user.email.toLowerCase()
+          );
+
+          if (userAds.length > 0) {
+            return (
+              <div className="space-y-3">
+                <span className="text-xs font-bold text-slate-800 block">
+                  Your Active Tool Ads ({userAds.length})
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {userAds.map((ad) => (
+                    <div
+                      key={ad.id}
+                      className="p-3.5 rounded-xl border border-violet-200 bg-violet-50/40 flex items-center gap-3.5"
+                    >
+                      <div className="h-12 w-20 bg-slate-950 rounded-lg p-1.5 flex items-center justify-center shrink-0 border border-slate-800">
+                        <img
+                          src={ad.logoUrl}
+                          alt={ad.name}
+                          className="max-h-full max-w-full object-contain"
+                        />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <h4 className="font-bold text-xs text-slate-900 truncate">{ad.name}</h4>
+                          <span className="text-[9px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.2 rounded">
+                            ACTIVE
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 truncate">{ad.tagline}</p>
+                        <a
+                          href={ad.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[10px] text-violet-700 hover:underline flex items-center gap-1 font-semibold mt-0.5"
+                        >
+                          <Globe className="h-2.5 w-2.5" />
+                          <span>{ad.url}</span>
+                        </a>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          }
+
+          return (
+            <div className="p-4 rounded-xl bg-slate-50 border border-dashed border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-600">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-xl bg-violet-100 text-violet-700 flex items-center justify-center font-bold text-xs shrink-0">
+                  <Globe className="h-4 w-4" />
+                </div>
+                <div>
+                  <span className="font-bold text-slate-800 block">You haven't listed a creator tool yet.</span>
+                  <span className="text-[11px] text-slate-500">
+                    Upload your logo, enter your target URL, and launch your 30-day campaign for $150.
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={onOpenAdModal}
+                className="px-3.5 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-100 text-slate-800 font-bold text-xs transition cursor-pointer shrink-0"
+              >
+                Upload Logo & Get Started
+              </button>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Collapsible Market Intelligence / Comparison Section */}

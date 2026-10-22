@@ -735,6 +735,40 @@ app.post("/api/saas/config", (req, res) => {
   res.json({ success: true, config: updated });
 });
 
+// User Authentication Endpoints (Simple Email/Password & 1-Click Google)
+app.post("/api/auth/register", (req, res) => {
+  const { email, password, name } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ success: false, error: "Email and password are required." });
+  }
+  const result = saasDb.register(email, password, name);
+  if (!result.success) {
+    return res.status(400).json(result);
+  }
+  res.json(result);
+});
+
+app.post("/api/auth/login", (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ success: false, error: "Email and password are required." });
+  }
+  const result = saasDb.login(email, password);
+  if (!result.success) {
+    return res.status(401).json(result);
+  }
+  res.json(result);
+});
+
+app.post("/api/auth/google", (req, res) => {
+  const { email, name, avatarUrl } = req.body;
+  if (!email) {
+    return res.status(400).json({ success: false, error: "Google email is required." });
+  }
+  const result = saasDb.loginWithGoogle(email, name, avatarUrl);
+  res.json(result);
+});
+
 app.get("/api/saas/user", (req, res) => {
   const email = (req.query.email as string) || "demo@user.com";
   res.json(saasDb.getUser(email));
@@ -772,12 +806,28 @@ app.post("/api/saas/buy-pack", (req, res) => {
   }
 });
 
+const ADMIN_EMAILS = [
+  "customerservice.mme365@gmail.com",
+  "marketingmanagementenp.365@gmail.com"
+];
+
 app.get("/api/saas/admin/overview", (req, res) => {
+  const reqEmail = ((req.query.email || req.headers["x-user-email"]) as string || "").trim().toLowerCase();
+  // If email is provided, verify it is one of the authorized Google admins
+  if (reqEmail && !ADMIN_EMAILS.includes(reqEmail)) {
+    return res.status(403).json({ error: "Access denied. Only authorized Google admin accounts can access admin overview." });
+  }
   res.json(saasDb.getAdminOverview());
 });
 
 app.post("/api/saas/admin/update-user", (req, res) => {
-  const { email, tier, resetDownloads } = req.body;
+  const { email, tier, resetDownloads, adminEmail } = req.body;
+  const verifiedAdmin = (adminEmail || (req.headers["x-user-email"] as string) || "").trim().toLowerCase();
+
+  if (verifiedAdmin && !ADMIN_EMAILS.includes(verifiedAdmin)) {
+    return res.status(403).json({ error: "Access denied. Only authorized Google admin accounts can modify user state." });
+  }
+
   if (!email) return res.status(400).json({ error: "Email required" });
   
   if (tier) {
@@ -787,6 +837,73 @@ app.post("/api/saas/admin/update-user", (req, res) => {
     saasDb.resetUserDownloads(email);
   }
   res.json({ success: true, user: saasDb.getUser(email) });
+});
+
+// Creator Tool Ads Endpoints ($150 per 30-day cycle)
+app.get("/api/saas/creator-ads", (req, res) => {
+  res.json({ success: true, ads: saasDb.getCreatorAds() });
+});
+
+app.post("/api/saas/creator-ads", (req, res) => {
+  try {
+    const { name, tagline, description, url, logoUrl, category, advertiserEmail, paypalOrderId } = req.body;
+    if (!name || !url || !logoUrl) {
+      return res.status(400).json({ error: "Tool name, target URL, and brand logo are required." });
+    }
+    const result = saasDb.addCreatorAd({
+      name,
+      tagline: tagline || "Creator Software & Media Utility",
+      description,
+      url,
+      logoUrl,
+      category,
+      advertiserEmail,
+      paypalOrderId
+    });
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to book creator tool ad" });
+  }
+});
+
+app.delete("/api/saas/creator-ads/:id", (req, res) => {
+  const result = saasDb.deleteCreatorAd(req.params.id);
+  res.json(result);
+});
+
+// Upload custom logo image for Creator Tool Ad
+app.post("/api/upload-ad-logo", express.json({ limit: "15mb" }), (req, res) => {
+  try {
+    const { imageBase64, filename = "ad_logo.png" } = req.body;
+    if (!imageBase64) {
+      return res.status(400).json({ error: "No image payload provided" });
+    }
+
+    const matches = imageBase64.match(/^data:image\/([a-zA-Z0-9]+);base64,(.+)$/);
+    let buffer: Buffer;
+    let ext = "png";
+    if (matches) {
+      ext = matches[1] === "jpeg" ? "jpg" : matches[1];
+      buffer = Buffer.from(matches[2], "base64");
+    } else {
+      buffer = Buffer.from(imageBase64, "base64");
+    }
+
+    const uploadsDir = path.join(process.cwd(), "public", "assets", "uploads");
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
+
+    const cleanName = `ad_logo_${Date.now()}.${ext}`;
+    const filePath = path.join(uploadsDir, cleanName);
+    fs.writeFileSync(filePath, buffer);
+
+    const publicUrl = `/assets/uploads/${cleanName}`;
+    res.json({ success: true, url: publicUrl });
+  } catch (err: any) {
+    console.error("Ad logo upload error:", err);
+    res.status(500).json({ error: err.message || "Failed to save logo" });
+  }
 });
 
 // Setup dev/prod server serving static and proxying modules

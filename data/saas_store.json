@@ -73,6 +73,32 @@
       "cycleResetDate": "2026-10-20T22:52:28.062Z",
       "joinedDate": "2026-08-07T22:52:28.062Z",
       "totalVideosProcessed": 520
+    },
+    {
+      "id": "usr_1792559620921_oo69",
+      "email": "testcreator@gmail.com",
+      "name": "Test Creator",
+      "tier": "free",
+      "downloadsUsed": 0,
+      "downloadsLimit": 1,
+      "cycleResetDate": "2026-10-28T05:13:40.921Z",
+      "joinedDate": "2026-10-21T05:13:40.921Z",
+      "totalVideosProcessed": 0,
+      "passwordHash": "ac3f3208387e5fce8f504c5834516a6acfe9abb6592d3a4da3754c0912dadacf",
+      "passwordSalt": "461310162733c30f218d225a096463ab",
+      "authProvider": "local"
+    },
+    {
+      "id": "usr_1792559631395_q1v4",
+      "email": "marketingmanagementenp.365@gmail.com",
+      "name": "Marketing Management",
+      "tier": "free",
+      "downloadsUsed": 0,
+      "downloadsLimit": 1,
+      "cycleResetDate": "2026-10-28T05:13:51.395Z",
+      "joinedDate": "2026-10-21T05:13:51.396Z",
+      "totalVideosProcessed": 0,
+      "authProvider": "google"
     }
   ],
   "transactions": [

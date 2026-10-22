@@ -175,6 +175,8 @@ export interface SaaSUser {
   cycleResetDate: string;
   joinedDate: string;
   totalVideosProcessed: number;
+  avatarUrl?: string;
+  authProvider?: "google" | "local";
 }
 
 export interface SaaSTransaction {
@@ -186,6 +188,107 @@ export interface SaaSTransaction {
   date: string;
   paypalTransactionId: string;
 }
+
+export interface CreatorToolAd {
+  id: string;
+  name: string;
+  tagline: string;
+  description: string;
+  url: string;
+  logoUrl: string;
+  category: string;
+  price: number; // 150
+  cycleDays: number; // 30
+  badge?: string;
+  advertiserEmail?: string;
+  createdAt: string;
+  expiresAt: string;
+  status: "active" | "pending" | "expired";
+  paypalOrderId?: string;
+}
+
+export const DEFAULT_CREATOR_TOOL_ADS: CreatorToolAd[] = [
+  {
+    id: "ad_lwe_sentry",
+    name: "LWE-Sentry",
+    tagline: "Autonomous Agent & Workflow Observability",
+    description: "Production telemetry tracing, real-time error sentinel, and autonomous workflow security guardrails for AI engineers.",
+    url: "https://lwe-sentry.io",
+    logoUrl: "/assets/aistudio/2007-removebg-preview_cc9a75cd.png",
+    category: "AI & Autonomous Agents",
+    price: 150,
+    cycleDays: 30,
+    badge: "Featured Partner",
+    advertiserEmail: "founder@lwe-sentry.io",
+    createdAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+    status: "active"
+  },
+  {
+    id: "ad_tiktok_appraiser",
+    name: "TikTok Appraiser",
+    tagline: "Channel Valuation & Sponsorship Rate Calculator",
+    description: "Instant engagement auditing, commercial sponsorship rate appraisals, and channel valuation algorithms for short-form creators.",
+    url: "https://tiktokappraiser.com",
+    logoUrl: "/assets/aistudio/1994-removebg-preview_05a69973.png",
+    category: "Creator Monetization",
+    price: 150,
+    cycleDays: 30,
+    badge: "Top Rated",
+    advertiserEmail: "team@tiktokappraiser.com",
+    createdAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 28 * 24 * 60 * 60 * 1000).toISOString(),
+    status: "active"
+  },
+  {
+    id: "ad_rank_my_spotify",
+    name: "Rank My Spotify",
+    tagline: "Algorithmic Playlist Placement & Stream Velocity",
+    description: "Real-time track positioning on algorithmic and editorial Spotify playlists. Optimize release metadata and accelerate monthly listeners.",
+    url: "https://rankmyspotify.com",
+    logoUrl: "/assets/aistudio/2001_c6af18b3.jpg",
+    category: "Music Tech & Growth",
+    price: 150,
+    cycleDays: 30,
+    badge: "Trending Music Tool",
+    advertiserEmail: "grow@rankmyspotify.com",
+    createdAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 29 * 24 * 60 * 60 * 1000).toISOString(),
+    status: "active"
+  },
+  {
+    id: "ad_tollpass_pro",
+    name: "TollPass Pro",
+    tagline: "Automated Travel Route & Toll Expense Optimizer",
+    description: "All-in-one toll transponder synchronization, route fuel optimization, and automated travel receipts for touring bands and traveling creators.",
+    url: "https://tollpasspro.com",
+    logoUrl: "/assets/aistudio/2013-removebg-preview_f5cc8dba.png",
+    category: "Tour & Mobile Logistics",
+    price: 150,
+    cycleDays: 30,
+    badge: "Verified Utility",
+    advertiserEmail: "support@tollpasspro.com",
+    createdAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 27 * 24 * 60 * 60 * 1000).toISOString(),
+    status: "active"
+  },
+  {
+    id: "ad_socialclipper",
+    name: "SocialClipper",
+    tagline: "YouTube Music Video to 9:16 Shorts Automation",
+    description: "Turn YouTube links into viral 9:16 vertical shorts in seconds. Algorithmic peak detection, animated lyrics, and 4K MP4 export.",
+    url: "https://socialclipper.io",
+    logoUrl: "/assets/aistudio/1991_1910e85f.jpg",
+    category: "Video Automation",
+    price: 150,
+    cycleDays: 30,
+    badge: "Host Platform",
+    advertiserEmail: "hello@socialclipper.io",
+    createdAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+    status: "active"
+  }
+];
 
 export interface AdminOverview {
   stats: {
@@ -201,6 +304,7 @@ export interface AdminOverview {
     enterprise: PlanConfig;
   };
   oneTimePacks?: OneTimePack[];
+  creatorAds?: CreatorToolAd[];
   paypalSettings: PayPalSettings;
   users: SaaSUser[];
   transactions: SaaSTransaction[];

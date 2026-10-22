@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Check, Zap, Sparkles, ArrowRight, Shield, Film, Smartphone, Layers, Clock, ExternalLink, Share2, Flame, Instagram, Youtube, TrendingUp, Tag, Award } from "lucide-react";
-import { PlanConfig, PayPalSettings, SaaSUser, OneTimePack, DEFAULT_ONE_TIME_PACKS } from "../types";
+import { PlanConfig, PayPalSettings, SaaSUser, OneTimePack, DEFAULT_ONE_TIME_PACKS, CreatorToolAd } from "../types";
 import { MarketComparison } from "./MarketComparison";
+import { CreatorToolsCarousel } from "./CreatorToolsCarousel";
 
 interface LandingPageProps {
   plans: {
@@ -12,9 +13,11 @@ interface LandingPageProps {
   paypalSettings: PayPalSettings;
   currentUser: SaaSUser;
   oneTimePacks?: OneTimePack[];
+  creatorAds?: CreatorToolAd[];
   onSelectPlan: (plan: "free" | "creator" | "enterprise", billingCycle?: "monthly" | "annual") => void;
   onSelectPack?: (packId: "pack_5" | "pack_25" | "pack_50") => void;
   onOpenDashboard: () => void;
+  onOpenAdModal?: () => void;
 }
 
 export function LandingPage({
@@ -22,9 +25,11 @@ export function LandingPage({
   paypalSettings,
   currentUser,
   oneTimePacks,
+  creatorAds,
   onSelectPlan,
   onSelectPack,
-  onOpenDashboard
+  onOpenDashboard,
+  onOpenAdModal
 }: LandingPageProps) {
   const [pricingMode, setPricingMode] = useState<"monthly" | "annual" | "onetime">("monthly");
   const activePacks = oneTimePacks && oneTimePacks.length > 0 ? oneTimePacks : DEFAULT_ONE_TIME_PACKS;
@@ -140,6 +145,14 @@ export function LandingPage({
             Direct auto-copy captions and 1-click publishing links for TikTok, Instagram Reels, and YouTube Shorts without phone air-drop hassle.
           </p>
         </div>
+      </section>
+
+      {/* FEATURED CREATOR TOOLS CAROUSEL (ABOVE MARKET INTELLIGENCE) */}
+      <section className="max-w-5xl mx-auto px-4">
+        <CreatorToolsCarousel
+          ads={creatorAds}
+          onOpenAdModal={onOpenAdModal || onOpenDashboard}
+        />
       </section>
 
       {/* MARKET COMPARISON & CREATOR VALUE SECTION */}
@@ -303,6 +316,71 @@ export function LandingPage({
                   </div>
                 );
               })}
+            </div>
+
+            {/* CREATOR TOOL ADS IN ONE-TIME SERVICES ($150 / 30 DAYS CYCLE) */}
+            <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 rounded-3xl p-6 sm:p-8 text-white border border-slate-700/80 shadow-xl relative overflow-hidden">
+              <div className="absolute top-0 right-0 -mt-10 -mr-10 w-48 h-48 bg-violet-600/20 rounded-full blur-3xl pointer-events-none" />
+
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
+                <div className="space-y-3 max-w-xl">
+                  <div className="inline-flex items-center gap-2 text-xs font-bold text-amber-300 bg-amber-400/10 border border-amber-400/30 px-3 py-1 rounded-full uppercase tracking-wider">
+                    <Sparkles className="h-3.5 w-3.5" />
+                    <span>One-Time Service • 30 Days Cycle</span>
+                  </div>
+
+                  <h3 className="font-display text-2xl sm:text-3xl font-extrabold text-white">
+                    Creator Tool Ad Spotlight
+                  </h3>
+
+                  <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                    Advertise your software, plugin, or creator service in our prominent partner carousel above Market Intelligence. Users click directly through to your website.
+                  </p>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 text-xs text-slate-200">
+                    <div className="flex items-center gap-2">
+                      <Check className="h-4 w-4 text-emerald-400 shrink-0" />
+                      <span>Carousel placement above Market Intelligence</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Check className="h-4 w-4 text-emerald-400 shrink-0" />
+                      <span>Upload your brand logo & target URL</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Check className="h-4 w-4 text-emerald-400 shrink-0" />
+                      <span>Full 30-day active rotation cycle</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Check className="h-4 w-4 text-emerald-400 shrink-0" />
+                      <span>Pay once via PayPal (no recurring billing)</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/15 text-center flex flex-col justify-between space-y-4 shrink-0 sm:min-w-[260px]">
+                  <div>
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-amber-300 block">
+                      One-Time Service
+                    </span>
+                    <div className="flex items-baseline justify-center gap-1 mt-1">
+                      <span className="text-4xl font-black text-white">$150</span>
+                      <span className="text-xs text-slate-300 font-medium">/ 30 days</span>
+                    </div>
+                    <span className="text-[10px] text-slate-300 block mt-1">
+                      Instant activation via PayPal
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={onOpenAdModal || onOpenDashboard}
+                    className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-amber-400 via-amber-500 to-yellow-500 hover:from-amber-500 hover:to-yellow-600 text-slate-950 font-black text-xs uppercase tracking-wider transition cursor-pointer shadow-md shadow-amber-500/20 flex items-center justify-center gap-1.5"
+                  >
+                    <span>Book Tool Ad ($150)</span>
+                    <ArrowRight className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         ) : (
