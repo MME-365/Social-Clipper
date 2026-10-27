@@ -48,67 +48,37 @@ export function CreatorToolsCarousel({
   }, [currentIndex, isPaused, totalSlides]);
 
   return (
-    <section className="space-y-5 pt-4 pb-2">
+    <section className="space-y-4 pt-4 pb-2 w-full">
       {/* Section Header */}
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-        <div className="space-y-2">
-          <div className="inline-flex items-center gap-1.5 text-xs font-bold text-violet-700 bg-violet-50 px-3 py-1 rounded-full border border-violet-200">
-            <Sparkles className="h-3.5 w-3.5 text-amber-500" />
-            <span>Creator Software Ecosystem</span>
-          </div>
-
-          <h2 className="font-display text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-            Featured <span className="text-violet-600">Creator Tools</span> & Partner Apps
-          </h2>
-
-          <p className="text-xs sm:text-sm text-slate-500 max-w-xl leading-relaxed">
-            Spotlight showcases of essential tools built for digital creators, audio engineers, and short-form video editors.
-          </p>
+      <div className="space-y-2">
+        <div className="inline-flex items-center gap-1.5 text-xs font-bold text-violet-700 bg-violet-50 px-3 py-1 rounded-full border border-violet-200">
+          <Sparkles className="h-3.5 w-3.5 text-amber-500" />
+          <span>Creator Software Ecosystem</span>
         </div>
 
-        {/* Action Controls & Book Ad Button */}
-        <div className="flex items-center gap-2.5 shrink-0">
-          <button
-            type="button"
-            onClick={onOpenAdModal}
-            className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-bold text-xs shadow-xs transition flex items-center gap-1.5 cursor-pointer"
-          >
-            <PlusCircle className="h-3.5 w-3.5" />
-            <span>Advertise Your Tool ($150 / 30 Days)</span>
-          </button>
+        <h2 className="font-display text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+          Featured <span className="text-violet-600">Creator Tools</span> & Partner Apps
+        </h2>
 
-          {/* Single-Brand Carousel Arrows */}
-          <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-slate-200 shadow-2xs">
-            <button
-              type="button"
-              onClick={handlePrev}
-              disabled={totalSlides <= 1}
-              className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-700 disabled:opacity-30 transition cursor-pointer"
-              aria-label="Previous tool brand"
-              title="Previous brand"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <span className="text-[11px] font-mono font-bold text-slate-500 px-1 select-none">
-              {currentIndex + 1}/{totalSlides}
-            </span>
-            <button
-              type="button"
-              onClick={handleNext}
-              disabled={totalSlides <= 1}
-              className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-700 disabled:opacity-30 transition cursor-pointer"
-              aria-label="Next tool brand"
-              title="Next brand"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
+        <p className="text-xs sm:text-sm text-slate-500 max-w-2xl leading-relaxed">
+          Spotlight showcases of essential tools built for digital creators, audio engineers, and short-form video editors.
+        </p>
       </div>
 
-      {/* Single-Brand Spotlight Slide Track (No overlapping, exactly 1 brand at a time) */}
+      {/* Full-Length Button: Exact same width/length as the container */}
+      <button
+        type="button"
+        onClick={onOpenAdModal}
+        className="w-full py-3.5 px-6 rounded-2xl bg-gradient-to-r from-violet-600 via-indigo-600 to-violet-700 hover:from-violet-700 hover:to-indigo-700 text-white font-black text-sm sm:text-base shadow-sm hover:shadow-md transition-all flex items-center justify-center gap-2.5 cursor-pointer border border-violet-500/30 group"
+      >
+        <PlusCircle className="h-4 w-4 text-violet-200 group-hover:scale-110 transition-transform" />
+        <span>Advertise Your Tool ($150 / 30 Days)</span>
+        <ArrowRight className="h-4 w-4 text-violet-200 group-hover:translate-x-1 transition-transform ml-1" />
+      </button>
+
+      {/* Single-Brand Spotlight Slide Track (Exactly 1 brand at a time, 0 overlapping) */}
       <div
-        className="relative overflow-hidden rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white shadow-sm"
+        className="w-full relative overflow-hidden rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white shadow-sm"
         onMouseEnter={() => setIsPaused(true)}
         onMouseLeave={() => setIsPaused(false)}
         ref={containerRef}
@@ -202,7 +172,7 @@ export function CreatorToolsCarousel({
                       </div>
 
                       <div className="text-[11px] font-mono font-medium text-slate-400">
-                        Brand Spotlight #{idx + 1}
+                        Brand Spotlight #{idx + 1} of {totalSlides}
                       </div>
                     </div>
 
@@ -256,25 +226,54 @@ export function CreatorToolsCarousel({
         </div>
       </div>
 
-      {/* Slide Indicators / Dots (1 for each individual brand) */}
-      {totalSlides > 1 && (
-        <div className="flex items-center justify-center gap-2 pt-1">
+      {/* Navigation Controls Bar: Placed BELOW the brands card */}
+      <div className="w-full flex flex-col sm:flex-row items-center justify-between gap-3 pt-1">
+        {/* Slide Indicators / Dots */}
+        <div className="flex items-center gap-2">
           {activeAds.map((ad, idx) => (
             <button
               key={ad.id}
               type="button"
               onClick={() => setCurrentIndex(idx)}
-              className={`h-2 rounded-full transition-all cursor-pointer ${
+              className={`h-2.5 rounded-full transition-all cursor-pointer ${
                 currentIndex === idx
-                  ? "w-8 bg-violet-600"
-                  : "w-2 bg-slate-200 hover:bg-slate-300"
+                  ? "w-8 bg-violet-600 shadow-xs"
+                  : "w-2.5 bg-slate-200 hover:bg-slate-300"
               }`}
               aria-label={`Show ${ad.name} spotlight`}
-              title={`Show ${ad.name}`}
+              title={`Show ${ad.name} (${idx + 1}/${totalSlides})`}
             />
           ))}
+          <span className="text-xs font-mono font-bold text-slate-400 ml-1">
+            {currentIndex + 1} / {totalSlides}
+          </span>
         </div>
-      )}
+
+        {/* Previous & Next Buttons */}
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <button
+            type="button"
+            onClick={handlePrev}
+            disabled={totalSlides <= 1}
+            className="flex-1 sm:flex-initial px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs transition flex items-center justify-center gap-1.5 shadow-2xs hover:shadow-xs disabled:opacity-40 cursor-pointer"
+            aria-label="Previous brand"
+          >
+            <ChevronLeft className="h-4 w-4" />
+            <span>Previous Brand</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleNext}
+            disabled={totalSlides <= 1}
+            className="flex-1 sm:flex-initial px-6 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-bold text-xs transition flex items-center justify-center gap-2 shadow-xs hover:shadow-md disabled:opacity-40 cursor-pointer"
+            aria-label="Next brand"
+          >
+            <span>Next Brand</span>
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
 
       {/* Mini Promotion Banner ($150 / 30 Days in One-Time Services) */}
       <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-violet-950 via-indigo-900 to-slate-900 text-white flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
