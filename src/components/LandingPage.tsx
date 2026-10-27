@@ -493,17 +493,23 @@ export function LandingPage({
                       </span>
                     </button>
 
-                    {paypalSettings.creatorPayPalLink && (
-                      <a
-                        href={paypalSettings.creatorPayPalLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="w-full py-1.5 text-center text-[11px] text-violet-600 hover:underline flex items-center justify-center gap-1 font-medium"
-                      >
-                        <span>Checkout directly via PayPal</span>
-                        <ExternalLink className="h-3 w-3" />
-                      </a>
-                    )}
+                    {(() => {
+                      const creatorLink = isAnnual
+                        ? (paypalSettings.creatorAnnualPayPalLink || paypalSettings.creatorPayPalLink)
+                        : (paypalSettings.creatorMonthlyPayPalLink || paypalSettings.creatorPayPalLink);
+
+                      return creatorLink ? (
+                        <a
+                          href={creatorLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="w-full py-1.5 text-center text-[11px] text-violet-600 hover:underline flex items-center justify-center gap-1 font-medium"
+                        >
+                          <span>Checkout {isAnnual ? "Annual" : "Monthly"} via PayPal</span>
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      ) : null;
+                    })()}
                   </div>
                 </div>
               );
@@ -569,17 +575,23 @@ export function LandingPage({
                       </span>
                     </button>
 
-                    {paypalSettings.enterprisePayPalLink && (
-                      <a
-                        href={paypalSettings.enterprisePayPalLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="w-full py-1.5 text-center text-[11px] text-slate-600 hover:underline flex items-center justify-center gap-1 font-medium"
-                      >
-                        <span>PayPal Enterprise Checkout</span>
-                        <ExternalLink className="h-3 w-3" />
-                      </a>
-                    )}
+                    {(() => {
+                      const enterpriseLink = isAnnual
+                        ? (paypalSettings.enterpriseAnnualPayPalLink || paypalSettings.enterprisePayPalLink)
+                        : (paypalSettings.enterpriseMonthlyPayPalLink || paypalSettings.enterprisePayPalLink);
+
+                      return enterpriseLink ? (
+                        <a
+                          href={enterpriseLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="w-full py-1.5 text-center text-[11px] text-slate-600 hover:underline flex items-center justify-center gap-1 font-medium"
+                        >
+                          <span>Checkout {isAnnual ? "Annual" : "Monthly"} via PayPal</span>
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      ) : null;
+                    })()}
                   </div>
                 </div>
               );

@@ -158,8 +158,22 @@ export interface PlanConfig {
 }
 
 export interface PayPalSettings {
-  creatorPayPalLink: string;
-  enterprisePayPalLink: string;
+  // Monthly subscription links
+  creatorMonthlyPayPalLink?: string;
+  enterpriseMonthlyPayPalLink?: string;
+  creatorPayPalLink: string; // standard monthly
+  enterprisePayPalLink: string; // standard monthly
+
+  // Annual subscription links (20% off)
+  creatorAnnualPayPalLink?: string;
+  enterpriseAnnualPayPalLink?: string;
+
+  // One-time service links
+  creatorAdPayPalLink?: string; // $150 / 30-Day Creator Tool Ad Spotlight
+  pack5PayPalLink?: string;     // $5 Starter Pack (12 Video Downloads)
+  pack25PayPalLink?: string;    // $25 Creator Booster Pack (65 Video Downloads)
+  pack50PayPalLink?: string;    // $50 Power Studio Vault (135 Video Downloads)
+
   paypalClientId: string;
   merchantEmail: string;
 }

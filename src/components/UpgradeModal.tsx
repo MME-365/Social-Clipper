@@ -199,17 +199,22 @@ export function UpgradeModal({
                     >
                       Upgrade Creator (${price})
                     </button>
-                    {paypalSettings.creatorPayPalLink && (
-                      <a
-                        href={paypalSettings.creatorPayPalLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[10px] text-violet-600 hover:underline flex items-center justify-center gap-1 text-center"
-                      >
-                        <span>PayPal link</span>
-                        <ExternalLink className="h-2.5 w-2.5" />
-                      </a>
-                    )}
+                    {(() => {
+                      const link = isAnnual
+                        ? (paypalSettings.creatorAnnualPayPalLink || paypalSettings.creatorPayPalLink)
+                        : (paypalSettings.creatorMonthlyPayPalLink || paypalSettings.creatorPayPalLink);
+                      return link ? (
+                        <a
+                          href={link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[10px] text-violet-600 hover:underline flex items-center justify-center gap-1 text-center"
+                        >
+                          <span>Checkout via PayPal</span>
+                          <ExternalLink className="h-2.5 w-2.5" />
+                        </a>
+                      ) : null;
+                    })()}
                   </div>
                 </div>
               );
@@ -268,17 +273,22 @@ export function UpgradeModal({
                     >
                       Upgrade Enterprise (${price})
                     </button>
-                    {paypalSettings.enterprisePayPalLink && (
-                      <a
-                        href={paypalSettings.enterprisePayPalLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[10px] text-slate-600 hover:underline flex items-center justify-center gap-1 text-center"
-                      >
-                        <span>PayPal link</span>
-                        <ExternalLink className="h-2.5 w-2.5" />
-                      </a>
-                    )}
+                    {(() => {
+                      const link = isAnnual
+                        ? (paypalSettings.enterpriseAnnualPayPalLink || paypalSettings.enterprisePayPalLink)
+                        : (paypalSettings.enterpriseMonthlyPayPalLink || paypalSettings.enterprisePayPalLink);
+                      return link ? (
+                        <a
+                          href={link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[10px] text-slate-600 hover:underline flex items-center justify-center gap-1 text-center"
+                        >
+                          <span>Checkout via PayPal</span>
+                          <ExternalLink className="h-2.5 w-2.5" />
+                        </a>
+                      ) : null;
+                    })()}
                   </div>
                 </div>
               );

@@ -119,8 +119,16 @@ export default function App() {
   });
 
   const [paypalSettings, setPaypalSettings] = useState<PayPalSettings>({
+    creatorMonthlyPayPalLink: "https://www.paypal.com/ncp/payment/CREATOR9_MONTHLY",
+    enterpriseMonthlyPayPalLink: "https://www.paypal.com/ncp/payment/ENTERPRISE99_MONTHLY",
     creatorPayPalLink: "https://www.paypal.com/ncp/payment/CREATOR9",
     enterprisePayPalLink: "https://www.paypal.com/ncp/payment/ENTERPRISE99",
+    creatorAnnualPayPalLink: "https://www.paypal.com/ncp/payment/CREATOR_ANNUAL_86",
+    enterpriseAnnualPayPalLink: "https://www.paypal.com/ncp/payment/ENTERPRISE_ANNUAL_950",
+    creatorAdPayPalLink: "https://www.paypal.com/ncp/payment/CREATOR_AD_150",
+    pack5PayPalLink: "https://www.paypal.com/ncp/payment/PACK5",
+    pack25PayPalLink: "https://www.paypal.com/ncp/payment/PACK25",
+    pack50PayPalLink: "https://www.paypal.com/ncp/payment/PACK50",
     paypalClientId: "sb-client-id-sample",
     merchantEmail: "billing@socialclipper.io"
   });

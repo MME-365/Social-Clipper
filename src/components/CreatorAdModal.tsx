@@ -395,9 +395,22 @@ export function CreatorAdModal({
               <ArrowRight className="h-4 w-4" />
             </button>
 
-            <p className="text-[11px] text-center text-slate-400 font-medium">
-              🔒 Instant activation • Ad goes live immediately in the carousel for 30 days
-            </p>
+            <div className="space-y-1 text-center">
+              <p className="text-[11px] text-slate-400 font-medium">
+                🔒 Instant activation • Ad goes live immediately in the carousel for 30 days
+              </p>
+              {paypalSettings.creatorAdPayPalLink && (
+                <a
+                  href={paypalSettings.creatorAdPayPalLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 hover:underline"
+                >
+                  <span>Open direct PayPal payment portal</span>
+                  <ExternalLink className="h-2.5 w-2.5" />
+                </a>
+              )}
+            </div>
           </div>
         </form>
       </div>

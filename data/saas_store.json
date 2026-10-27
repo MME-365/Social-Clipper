@@ -17,7 +17,7 @@
       "interval": "month",
       "downloadLimit": 35,
       "allowBatch": true,
-      "paypalLink": "https://www.paypal.com/ncp/payment/MYCREATOR",
+      "paypalLink": "https://www.paypal.com/ncp/payment/CREATOR9_MONTHLY",
       "features": [
         "35 downloads/mo"
       ]
@@ -35,8 +35,16 @@
     }
   },
   "paypalSettings": {
+    "creatorMonthlyPayPalLink": "https://www.paypal.com/ncp/payment/CREATOR9_MONTHLY",
+    "enterpriseMonthlyPayPalLink": "https://www.paypal.com/ncp/payment/ENTERPRISE99_MONTHLY",
     "creatorPayPalLink": "https://www.paypal.com/ncp/payment/CREATOR9",
     "enterprisePayPalLink": "https://www.paypal.com/ncp/payment/ENTERPRISE99",
+    "creatorAnnualPayPalLink": "https://www.paypal.com/ncp/payment/CREATOR_ANNUAL_86",
+    "enterpriseAnnualPayPalLink": "https://www.paypal.com/ncp/payment/ENTERPRISE_ANNUAL_950",
+    "creatorAdPayPalLink": "https://www.paypal.com/ncp/payment/CREATOR_AD_150",
+    "pack5PayPalLink": "https://www.paypal.com/ncp/payment/PACK5",
+    "pack25PayPalLink": "https://www.paypal.com/ncp/payment/PACK25",
+    "pack50PayPalLink": "https://www.paypal.com/ncp/payment/PACK50",
     "paypalClientId": "sb-client-id-sample",
     "merchantEmail": "billing@socialclipper.io"
   },
@@ -99,6 +107,17 @@
       "joinedDate": "2026-10-21T05:13:51.396Z",
       "totalVideosProcessed": 0,
       "authProvider": "google"
+    },
+    {
+      "id": "usr_1793067024680_kanb",
+      "email": "customerservice.mme365@gmail.com",
+      "name": "customerservice.mme365",
+      "tier": "free",
+      "downloadsUsed": 0,
+      "downloadsLimit": 1,
+      "cycleResetDate": "2026-11-03T02:10:24.680Z",
+      "joinedDate": "2026-10-27T02:10:24.680Z",
+      "totalVideosProcessed": 0
     }
   ],
   "transactions": [
@@ -209,6 +228,88 @@
         "Burnt-in logo & custom subtitles",
         "Credits never expire"
       ]
+    }
+  ],
+  "creatorAds": [
+    {
+      "id": "ad_lwe_sentry",
+      "name": "LWE-Sentry",
+      "tagline": "Autonomous Agent & Workflow Observability",
+      "description": "Production telemetry tracing, real-time error sentinel, and autonomous workflow security guardrails for AI engineers.",
+      "url": "https://lwe-sentry.io",
+      "logoUrl": "/assets/aistudio/2007-removebg-preview_cc9a75cd.png",
+      "category": "AI & Autonomous Agents",
+      "price": 150,
+      "cycleDays": 30,
+      "badge": "Featured Partner",
+      "advertiserEmail": "founder@lwe-sentry.io",
+      "createdAt": "2026-10-27T02:05:55.915Z",
+      "expiresAt": "2026-11-26T02:05:55.915Z",
+      "status": "active"
+    },
+    {
+      "id": "ad_tiktok_appraiser",
+      "name": "TikTok Appraiser",
+      "tagline": "Channel Valuation & Sponsorship Rate Calculator",
+      "description": "Instant engagement auditing, commercial sponsorship rate appraisals, and channel valuation algorithms for short-form creators.",
+      "url": "https://tiktokappraiser.com",
+      "logoUrl": "/assets/aistudio/1994-removebg-preview_05a69973.png",
+      "category": "Creator Monetization",
+      "price": 150,
+      "cycleDays": 30,
+      "badge": "Top Rated",
+      "advertiserEmail": "team@tiktokappraiser.com",
+      "createdAt": "2026-10-27T02:05:55.915Z",
+      "expiresAt": "2026-11-24T02:05:55.915Z",
+      "status": "active"
+    },
+    {
+      "id": "ad_rank_my_spotify",
+      "name": "Rank My Spotify",
+      "tagline": "Algorithmic Playlist Placement & Stream Velocity",
+      "description": "Real-time track positioning on algorithmic and editorial Spotify playlists. Optimize release metadata and accelerate monthly listeners.",
+      "url": "https://rankmyspotify.com",
+      "logoUrl": "/assets/aistudio/2001_c6af18b3.jpg",
+      "category": "Music Tech & Growth",
+      "price": 150,
+      "cycleDays": 30,
+      "badge": "Trending Music Tool",
+      "advertiserEmail": "grow@rankmyspotify.com",
+      "createdAt": "2026-10-27T02:05:55.915Z",
+      "expiresAt": "2026-11-25T02:05:55.915Z",
+      "status": "active"
+    },
+    {
+      "id": "ad_tollpass_pro",
+      "name": "TollPass Pro",
+      "tagline": "Automated Travel Route & Toll Expense Optimizer",
+      "description": "All-in-one toll transponder synchronization, route fuel optimization, and automated travel receipts for touring bands and traveling creators.",
+      "url": "https://tollpasspro.com",
+      "logoUrl": "/assets/aistudio/2013-removebg-preview_f5cc8dba.png",
+      "category": "Tour & Mobile Logistics",
+      "price": 150,
+      "cycleDays": 30,
+      "badge": "Verified Utility",
+      "advertiserEmail": "support@tollpasspro.com",
+      "createdAt": "2026-10-27T02:05:55.915Z",
+      "expiresAt": "2026-11-23T02:05:55.915Z",
+      "status": "active"
+    },
+    {
+      "id": "ad_socialclipper",
+      "name": "SocialClipper",
+      "tagline": "YouTube Music Video to 9:16 Shorts Automation",
+      "description": "Turn YouTube links into viral 9:16 vertical shorts in seconds. Algorithmic peak detection, animated lyrics, and 4K MP4 export.",
+      "url": "https://socialclipper.io",
+      "logoUrl": "/assets/aistudio/1991_1910e85f.jpg",
+      "category": "Video Automation",
+      "price": 150,
+      "cycleDays": 30,
+      "badge": "Host Platform",
+      "advertiserEmail": "hello@socialclipper.io",
+      "createdAt": "2026-10-27T02:05:55.915Z",
+      "expiresAt": "2026-11-26T02:05:55.915Z",
+      "status": "active"
     }
   ]
 }

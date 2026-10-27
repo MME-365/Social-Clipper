@@ -469,50 +469,383 @@ export function AdminPanel({
         </form>
       )}
 
-      {/* Tab 2: PayPal Payment Links Settings */}
+      {/* Tab 2: PayPal Payment Links Settings (Monthly, Annual & One-Times) */}
       {activeTab === "paypal" && (
-        <form onSubmit={handleSaveConfig} className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-xs space-y-5">
-          <div>
-            <h3 className="font-display font-bold text-base text-slate-900">
-              PayPal Links & Merchant Inputs
-            </h3>
-            <p className="text-xs text-slate-500">
-              Paste your official PayPal Checkout or Subscription buttons URL for Creator and Enterprise plans.
-            </p>
+        <form onSubmit={handleSaveConfig} className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-xs space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-4">
+            <div>
+              <h3 className="font-display font-bold text-base text-slate-900 flex items-center gap-2">
+                <span>PayPal Payment Links & Service Gateways</span>
+                <span className="text-[10px] font-extrabold bg-violet-100 text-violet-800 px-2 py-0.5 rounded-full uppercase">
+                  Live Checkout Links
+                </span>
+              </h3>
+              <p className="text-xs text-slate-500">
+                Paste your official PayPal Checkout or Subscription buttons URL for every service: Monthly, Annual (20% off), and One-Time packs/ads.
+              </p>
+            </div>
           </div>
 
-          <div className="space-y-4">
-            <div>
-              <label className="text-xs font-semibold text-slate-700 block mb-1">
-                Creator Plan PayPal Payment URL ($9/mo)
-              </label>
-              <input
-                type="url"
-                value={paypalSettings.creatorPayPalLink}
-                onChange={(e) =>
-                  setPaypalSettings({ ...paypalSettings, creatorPayPalLink: e.target.value })
-                }
-                placeholder="https://www.paypal.com/ncp/payment/..."
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-violet-500 font-mono"
-              />
+          {/* Group 1: Monthly Subscription Plans */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                1. Monthly Subscription Plans
+              </span>
+              <span className="text-[10px] font-bold text-violet-700 bg-violet-50 px-2 py-0.5 rounded-md border border-violet-100">
+                Recurring Billing
+              </span>
             </div>
 
-            <div>
-              <label className="text-xs font-semibold text-slate-700 block mb-1">
-                Enterprise Plan PayPal Payment URL ($99/mo)
-              </label>
-              <input
-                type="url"
-                value={paypalSettings.enterprisePayPalLink}
-                onChange={(e) =>
-                  setPaypalSettings({ ...paypalSettings, enterprisePayPalLink: e.target.value })
-                }
-                placeholder="https://www.paypal.com/ncp/payment/..."
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-violet-500 font-mono"
-              />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Creator Tier Monthly ($9/mo) */}
+              <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-800">
+                    Creator Tier — Monthly ($9/mo)
+                  </label>
+                  <span className="text-[10px] font-mono text-violet-700 font-bold bg-white px-2 py-0.5 rounded border border-slate-200">
+                    35 vids / mo
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="url"
+                    value={paypalSettings.creatorMonthlyPayPalLink || paypalSettings.creatorPayPalLink || ""}
+                    onChange={(e) =>
+                      setPaypalSettings({
+                        ...paypalSettings,
+                        creatorMonthlyPayPalLink: e.target.value,
+                        creatorPayPalLink: e.target.value
+                      })
+                    }
+                    placeholder="https://www.paypal.com/ncp/payment/CREATOR9_MONTHLY"
+                    className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 font-mono focus:outline-none focus:ring-1 focus:ring-violet-500"
+                  />
+                  {(paypalSettings.creatorMonthlyPayPalLink || paypalSettings.creatorPayPalLink) && (
+                    <a
+                      href={paypalSettings.creatorMonthlyPayPalLink || paypalSettings.creatorPayPalLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-2 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 transition"
+                      title="Test PayPal Link"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5 text-violet-600" />
+                    </a>
+                  )}
+                </div>
+                <p className="text-[10px] text-slate-500">Displayed when users select Creator Tier on monthly billing.</p>
+              </div>
+
+              {/* Enterprise Tier Monthly ($99/mo) */}
+              <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-800">
+                    Enterprise Tier — Monthly ($99/mo)
+                  </label>
+                  <span className="text-[10px] font-mono text-violet-700 font-bold bg-white px-2 py-0.5 rounded border border-slate-200">
+                    400 vids / mo
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="url"
+                    value={paypalSettings.enterpriseMonthlyPayPalLink || paypalSettings.enterprisePayPalLink || ""}
+                    onChange={(e) =>
+                      setPaypalSettings({
+                        ...paypalSettings,
+                        enterpriseMonthlyPayPalLink: e.target.value,
+                        enterprisePayPalLink: e.target.value
+                      })
+                    }
+                    placeholder="https://www.paypal.com/ncp/payment/ENTERPRISE99_MONTHLY"
+                    className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 font-mono focus:outline-none focus:ring-1 focus:ring-violet-500"
+                  />
+                  {(paypalSettings.enterpriseMonthlyPayPalLink || paypalSettings.enterprisePayPalLink) && (
+                    <a
+                      href={paypalSettings.enterpriseMonthlyPayPalLink || paypalSettings.enterprisePayPalLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-2 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 transition"
+                      title="Test PayPal Link"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5 text-violet-600" />
+                    </a>
+                  )}
+                </div>
+                <p className="text-[10px] text-slate-500">Displayed when users select Enterprise Tier on monthly billing.</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Group 2: Annual Subscription Plans (20% Discount) */}
+          <div className="space-y-3 pt-2 border-t border-slate-100">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                2. Annual Subscription Plans
+              </span>
+              <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                20% Off Annual Deal
+              </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Creator Tier Annual ($86/yr) */}
+              <div className="bg-violet-50/40 border border-violet-200/80 rounded-xl p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-violet-950">
+                    Creator Tier — Annual ($86/yr)
+                  </label>
+                  <span className="text-[10px] font-mono text-emerald-700 font-bold bg-white px-2 py-0.5 rounded border border-emerald-200">
+                    Save $22/yr
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="url"
+                    value={paypalSettings.creatorAnnualPayPalLink || ""}
+                    onChange={(e) =>
+                      setPaypalSettings({
+                        ...paypalSettings,
+                        creatorAnnualPayPalLink: e.target.value
+                      })
+                    }
+                    placeholder="https://www.paypal.com/ncp/payment/CREATOR_ANNUAL_86"
+                    className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 font-mono focus:outline-none focus:ring-1 focus:ring-violet-500"
+                  />
+                  {paypalSettings.creatorAnnualPayPalLink && (
+                    <a
+                      href={paypalSettings.creatorAnnualPayPalLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-2 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 transition"
+                      title="Test PayPal Link"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5 text-violet-600" />
+                    </a>
+                  )}
+                </div>
+                <p className="text-[10px] text-slate-500">Displayed on the landing page when user switches to Annual ($86 billed annually).</p>
+              </div>
+
+              {/* Enterprise Tier Annual ($950/yr) */}
+              <div className="bg-violet-50/40 border border-violet-200/80 rounded-xl p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-violet-950">
+                    Enterprise Tier — Annual ($950/yr)
+                  </label>
+                  <span className="text-[10px] font-mono text-emerald-700 font-bold bg-white px-2 py-0.5 rounded border border-emerald-200">
+                    Save $238/yr
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="url"
+                    value={paypalSettings.enterpriseAnnualPayPalLink || ""}
+                    onChange={(e) =>
+                      setPaypalSettings({
+                        ...paypalSettings,
+                        enterpriseAnnualPayPalLink: e.target.value
+                      })
+                    }
+                    placeholder="https://www.paypal.com/ncp/payment/ENTERPRISE_ANNUAL_950"
+                    className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 font-mono focus:outline-none focus:ring-1 focus:ring-violet-500"
+                  />
+                  {paypalSettings.enterpriseAnnualPayPalLink && (
+                    <a
+                      href={paypalSettings.enterpriseAnnualPayPalLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-2 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 transition"
+                      title="Test PayPal Link"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5 text-violet-600" />
+                    </a>
+                  )}
+                </div>
+                <p className="text-[10px] text-slate-500">Displayed on the landing page when user switches to Annual ($950 billed annually).</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Group 3: One-Time Services (Ads & Credit Packs) */}
+          <div className="space-y-3 pt-2 border-t border-slate-100">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                3. One-Time Services
+              </span>
+              <span className="text-[10px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
+                No Recurring Commitment
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Creator Tool Ad Spotlight ($150 / 30 Days) */}
+              <div className="bg-amber-50/40 border border-amber-200/90 rounded-xl p-4 space-y-2 md:col-span-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-900 flex items-center gap-2">
+                    <span>Creator Tool Ad Spotlight ($150 / 30 Days Cycle)</span>
+                    <span className="text-[10px] font-extrabold bg-amber-400 text-slate-950 px-2 py-0.5 rounded-full uppercase">
+                      Spotlight Carousel
+                    </span>
+                  </label>
+                  <span className="text-[11px] font-mono font-bold text-amber-900">
+                    $150.00
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="url"
+                    value={paypalSettings.creatorAdPayPalLink || ""}
+                    onChange={(e) =>
+                      setPaypalSettings({
+                        ...paypalSettings,
+                        creatorAdPayPalLink: e.target.value
+                      })
+                    }
+                    placeholder="https://www.paypal.com/ncp/payment/CREATOR_AD_150"
+                    className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 font-mono focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  />
+                  {paypalSettings.creatorAdPayPalLink && (
+                    <a
+                      href={paypalSettings.creatorAdPayPalLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-2 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 transition"
+                      title="Test PayPal Link"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5 text-amber-600" />
+                    </a>
+                  )}
+                </div>
+                <p className="text-[10px] text-slate-500">
+                  Used when creators book their 30-day carousel ad placement on the landing page or dashboard.
+                </p>
+              </div>
+
+              {/* Starter Pack ($5 - 12 Downloads) */}
+              <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-800">
+                    Starter Pack ($5 — 12 Downloads)
+                  </label>
+                  <span className="text-[10px] font-mono font-bold text-slate-600 bg-white px-2 py-0.5 rounded border border-slate-200">
+                    $5.00
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="url"
+                    value={paypalSettings.pack5PayPalLink || ""}
+                    onChange={(e) =>
+                      setPaypalSettings({
+                        ...paypalSettings,
+                        pack5PayPalLink: e.target.value
+                      })
+                    }
+                    placeholder="https://www.paypal.com/ncp/payment/PACK5"
+                    className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 font-mono focus:outline-none focus:ring-1 focus:ring-violet-500"
+                  />
+                  {paypalSettings.pack5PayPalLink && (
+                    <a
+                      href={paypalSettings.pack5PayPalLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-2 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 transition"
+                      title="Test PayPal Link"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5 text-violet-600" />
+                    </a>
+                  )}
+                </div>
+                <p className="text-[10px] text-slate-500">Lifetime video credits checkout for Starter Pack.</p>
+              </div>
+
+              {/* Creator Booster Pack ($25 - 65 Downloads) */}
+              <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-800">
+                    Creator Booster Pack ($25 — 65 Downloads)
+                  </label>
+                  <span className="text-[10px] font-mono font-bold text-slate-600 bg-white px-2 py-0.5 rounded border border-slate-200">
+                    $25.00
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="url"
+                    value={paypalSettings.pack25PayPalLink || ""}
+                    onChange={(e) =>
+                      setPaypalSettings({
+                        ...paypalSettings,
+                        pack25PayPalLink: e.target.value
+                      })
+                    }
+                    placeholder="https://www.paypal.com/ncp/payment/PACK25"
+                    className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 font-mono focus:outline-none focus:ring-1 focus:ring-violet-500"
+                  />
+                  {paypalSettings.pack25PayPalLink && (
+                    <a
+                      href={paypalSettings.pack25PayPalLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-2 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 transition"
+                      title="Test PayPal Link"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5 text-violet-600" />
+                    </a>
+                  )}
+                </div>
+                <p className="text-[10px] text-slate-500">Lifetime video credits checkout for Creator Booster Pack.</p>
+              </div>
+
+              {/* Power Studio Vault ($50 - 135 Downloads) */}
+              <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-4 space-y-2 md:col-span-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-800">
+                    Power Studio Vault ($50 — 135 Downloads)
+                  </label>
+                  <span className="text-[10px] font-mono font-bold text-slate-600 bg-white px-2 py-0.5 rounded border border-slate-200">
+                    $50.00
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="url"
+                    value={paypalSettings.pack50PayPalLink || ""}
+                    onChange={(e) =>
+                      setPaypalSettings({
+                        ...paypalSettings,
+                        pack50PayPalLink: e.target.value
+                      })
+                    }
+                    placeholder="https://www.paypal.com/ncp/payment/PACK50"
+                    className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 font-mono focus:outline-none focus:ring-1 focus:ring-violet-500"
+                  />
+                  {paypalSettings.pack50PayPalLink && (
+                    <a
+                      href={paypalSettings.pack50PayPalLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-2 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 transition"
+                      title="Test PayPal Link"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5 text-violet-600" />
+                    </a>
+                  )}
+                </div>
+                <p className="text-[10px] text-slate-500">Lifetime video credits checkout for Power Studio Vault.</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Group 4: Merchant Credentials */}
+          <div className="space-y-3 pt-2 border-t border-slate-100">
+            <span className="text-xs font-black text-slate-900 uppercase tracking-wider block">
+              4. Merchant Account & Gateway Credentials
+            </span>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="text-xs font-semibold text-slate-700 block mb-1">Merchant Email</label>
                 <input
@@ -521,7 +854,7 @@ export function AdminPanel({
                   onChange={(e) =>
                     setPaypalSettings({ ...paypalSettings, merchantEmail: e.target.value })
                   }
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs text-slate-800"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-violet-500"
                 />
               </div>
               <div>
@@ -532,19 +865,19 @@ export function AdminPanel({
                   onChange={(e) =>
                     setPaypalSettings({ ...paypalSettings, paypalClientId: e.target.value })
                   }
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs text-slate-800 font-mono"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs text-slate-800 font-mono focus:bg-white focus:outline-none focus:ring-1 focus:ring-violet-500"
                 />
               </div>
             </div>
           </div>
 
-          <div className="flex justify-end pt-2">
+          <div className="flex justify-end pt-3 border-t border-slate-100">
             <button
               type="submit"
               className="px-6 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-bold text-xs transition cursor-pointer shadow-xs flex items-center gap-1.5"
             >
               <Save className="h-4 w-4" />
-              <span>Save PayPal Configuration</span>
+              <span>Save All PayPal Links & Configurations</span>
             </button>
           </div>
         </form>

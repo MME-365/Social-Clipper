@@ -13,8 +13,22 @@ export interface PlanConfig {
 }
 
 export interface PayPalSettings {
-  creatorPayPalLink: string;
-  enterprisePayPalLink: string;
+  // Monthly subscription links
+  creatorMonthlyPayPalLink?: string;
+  enterpriseMonthlyPayPalLink?: string;
+  creatorPayPalLink: string; // standard monthly
+  enterprisePayPalLink: string; // standard monthly
+
+  // Annual subscription links (20% off)
+  creatorAnnualPayPalLink?: string;
+  enterpriseAnnualPayPalLink?: string;
+
+  // One-time service links
+  creatorAdPayPalLink?: string; // $150 / 30-Day Creator Tool Ad Spotlight
+  pack5PayPalLink?: string;     // $5 Starter Pack (12 Video Downloads)
+  pack25PayPalLink?: string;    // $25 Creator Booster Pack (65 Video Downloads)
+  pack50PayPalLink?: string;    // $50 Power Studio Vault (135 Video Downloads)
+
   paypalClientId: string;
   merchantEmail: string;
 }
@@ -279,8 +293,16 @@ const DEFAULT_STORE: SaaSStoreData = {
     }
   },
   paypalSettings: {
+    creatorMonthlyPayPalLink: "https://www.paypal.com/ncp/payment/CREATOR9_MONTHLY",
+    enterpriseMonthlyPayPalLink: "https://www.paypal.com/ncp/payment/ENTERPRISE99_MONTHLY",
     creatorPayPalLink: "https://www.paypal.com/ncp/payment/CREATOR9",
     enterprisePayPalLink: "https://www.paypal.com/ncp/payment/ENTERPRISE99",
+    creatorAnnualPayPalLink: "https://www.paypal.com/ncp/payment/CREATOR_ANNUAL_86",
+    enterpriseAnnualPayPalLink: "https://www.paypal.com/ncp/payment/ENTERPRISE_ANNUAL_950",
+    creatorAdPayPalLink: "https://www.paypal.com/ncp/payment/CREATOR_AD_150",
+    pack5PayPalLink: "https://www.paypal.com/ncp/payment/PACK5",
+    pack25PayPalLink: "https://www.paypal.com/ncp/payment/PACK25",
+    pack50PayPalLink: "https://www.paypal.com/ncp/payment/PACK50",
     paypalClientId: "sb-client-id-sample",
     merchantEmail: "billing@socialclipper.io"
   },
@@ -361,6 +383,10 @@ function loadStore(): SaaSStoreData {
       if (!data.creatorAds || !Array.isArray(data.creatorAds) || data.creatorAds.length === 0) {
         data.creatorAds = DEFAULT_CREATOR_TOOL_ADS;
       }
+      data.paypalSettings = {
+        ...DEFAULT_STORE.paypalSettings,
+        ...(data.paypalSettings || {})
+      };
       return data;
     }
   } catch (e) {
@@ -429,11 +455,13 @@ export const saasDb = {
     }
     if (updates.paypalSettings) {
       store.paypalSettings = { ...store.paypalSettings, ...updates.paypalSettings };
-      if (updates.paypalSettings.creatorPayPalLink) {
-        store.plans.creator.paypalLink = updates.paypalSettings.creatorPayPalLink;
+      const creatorLink = updates.paypalSettings.creatorMonthlyPayPalLink || updates.paypalSettings.creatorPayPalLink;
+      if (creatorLink) {
+        store.plans.creator.paypalLink = creatorLink;
       }
-      if (updates.paypalSettings.enterprisePayPalLink) {
-        store.plans.enterprise.paypalLink = updates.paypalSettings.enterprisePayPalLink;
+      const enterpriseLink = updates.paypalSettings.enterpriseMonthlyPayPalLink || updates.paypalSettings.enterprisePayPalLink;
+      if (enterpriseLink) {
+        store.plans.enterprise.paypalLink = enterpriseLink;
       }
     }
     saveStore(store);
