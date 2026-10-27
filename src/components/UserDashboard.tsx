@@ -380,11 +380,25 @@ export function UserDashboard({
                       key={ad.id}
                       className="p-3.5 rounded-xl border border-violet-200 bg-violet-50/40 flex items-center gap-3.5"
                     >
-                      <div className="h-12 w-20 bg-slate-950 rounded-lg p-1.5 flex items-center justify-center shrink-0 border border-slate-800">
+                      <div
+                        className={`h-12 w-20 rounded-lg p-1.5 flex items-center justify-center shrink-0 border ${
+                          ad.id === "ad_socialclipper" || ad.name.toLowerCase().includes("socialclipper")
+                            ? "bg-white border-slate-200 shadow-2xs"
+                            : "bg-slate-950 border-slate-800"
+                        }`}
+                      >
                         <img
                           src={ad.logoUrl}
                           alt={ad.name}
-                          className="max-h-full max-w-full object-contain"
+                          className={`max-h-full max-w-full object-contain ${
+                            ad.id === "ad_lwe_sentry" || ad.name.toLowerCase().includes("lwe")
+                              ? "translate-x-1"
+                              : "translate-x-0"
+                          } ${
+                            ad.id === "ad_socialclipper" || ad.name.toLowerCase().includes("socialclipper")
+                              ? "scale-[1.2]"
+                              : "scale-[1.28]"
+                          }`}
                         />
                       </div>
                       <div className="flex-1 min-w-0">

@@ -28,7 +28,22 @@ app.use("/downloads", (req, res, next) => {
   next();
 }, express.static(DOWNLOADS_DIR));
 
-const PORT = 3000;
+// Parse port and host from CLI args or environment variables
+const portArgIndex = process.argv.indexOf("--port");
+const cliPort = portArgIndex !== -1 && process.argv[portArgIndex + 1] ? parseInt(process.argv[portArgIndex + 1], 10) : NaN;
+const PORT = !isNaN(cliPort) ? cliPort : (process.env.PORT ? parseInt(process.env.PORT, 10) : 3000);
+
+const hostArgIndex = process.argv.indexOf("--host");
+const cliHost = hostArgIndex !== -1 && process.argv[hostArgIndex + 1] ? process.argv[hostArgIndex + 1] : undefined;
+const HOST = cliHost || process.env.HOST || "0.0.0.0";
+
+// Global process error guards to prevent unexpected exit
+process.on("uncaughtException", (err) => {
+  console.error("Server uncaughtException:", err);
+});
+process.on("unhandledRejection", (reason) => {
+  console.error("Server unhandledRejection:", reason);
+});
 
 // In-memory cache for direct video stream URLs to make HTTP byte-range seeks ultra-fast
 interface StreamInfo {
@@ -923,8 +938,20 @@ async function setupServer() {
   }
 }
 
-setupServer().then(() => {
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server started. Ingress binds to http://0.0.0.0:${PORT}`);
+setupServer()
+  .then(() => {
+    const server = app.listen(PORT, HOST, () => {
+      console.log(`Server started. Ingress binds to http://${HOST}:${PORT}`);
+    });
+    server.on("error", (err: any) => {
+      if (err.code === "EADDRINUSE") {
+        console.warn(`Port ${PORT} is in use; dev server instance running.`);
+      } else {
+        console.error("Server listen error:", err);
+      }
+    });
+  })
+  .catch((err) => {
+    console.error("Failed to initialize server:", err);
   });
-});
+

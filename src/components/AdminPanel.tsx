@@ -710,11 +710,25 @@ export function AdminPanel({
                 className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col justify-between space-y-3"
               >
                 <div className="flex items-start gap-3">
-                  <div className="h-16 w-28 bg-slate-950 rounded-lg p-2 flex items-center justify-center shrink-0 border border-slate-800">
+                  <div
+                    className={`h-16 w-28 rounded-lg p-2 flex items-center justify-center shrink-0 border ${
+                      ad.id === "ad_socialclipper" || ad.name.toLowerCase().includes("socialclipper")
+                        ? "bg-white border-slate-200 shadow-2xs"
+                        : "bg-slate-950 border-slate-800"
+                    }`}
+                  >
                     <img
                       src={ad.logoUrl}
                       alt={ad.name}
-                      className="max-h-full max-w-full object-contain"
+                      className={`max-h-full max-w-full object-contain ${
+                        ad.id === "ad_lwe_sentry" || ad.name.toLowerCase().includes("lwe")
+                          ? "translate-x-1.5"
+                          : "translate-x-0"
+                      } ${
+                        ad.id === "ad_socialclipper" || ad.name.toLowerCase().includes("socialclipper")
+                          ? "scale-[1.2]"
+                          : "scale-[1.28]"
+                      }`}
                     />
                   </div>
                   <div className="flex-1 min-w-0">
