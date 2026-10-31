@@ -34,6 +34,7 @@ import { UpgradeModal } from "./components/UpgradeModal";
 import { AuthModal } from "./components/AuthModal";
 import { DownloadReadyModal, DownloadModalData } from "./components/DownloadReadyModal";
 import { CreatorAdModal } from "./components/CreatorAdModal";
+import { SourceUploadModal } from "./components/SourceUploadModal";
 import { VideoClip, AspectRatioType, SaaSUser, PlanConfig, PayPalSettings, AdminOverview, KaraokeConfig, LogoWatermarkConfig, OneTimePack, DEFAULT_ONE_TIME_PACKS, CreatorToolAd, DEFAULT_CREATOR_TOOL_ADS } from "./types";
 import { KaraokeOverlay } from "./components/KaraokeOverlay";
 import { drawKaraokeSubtitles, drawBurntInLogo } from "./utils/karaokeRenderer";
@@ -168,6 +169,19 @@ export default function App() {
   const [exportProgress, setExportProgress] = useState<number>(0);
   const [batchProgress, setBatchProgress] = useState<{ current: number; total: number; progress: number } | null>(null);
   const [downloadSuccessMsg, setDownloadSuccessMsg] = useState<string | null>(null);
+
+  // YouTube stream caching & source upload states
+  const [ytCacheStatus, setYtCacheStatus] = useState<{
+    status: "idle" | "downloading" | "completed" | "failed";
+    progress: number;
+    message?: string;
+  }>({ status: "idle", progress: 0 });
+  const [sourceUploadModalOpen, setSourceUploadModalOpen] = useState(false);
+  const [sourceUploadReason, setSourceUploadReason] = useState<string>("");
+  const [pendingExportClipIndex, setPendingExportClipIndex] = useState<number | "all" | "full" | null>(null);
+  const [isUploadingSourceVideo, setIsUploadingSourceVideo] = useState(false);
+  const [sourceUploadProgress, setSourceUploadProgress] = useState(0);
+  const ytPollIntervalRef = useRef<any>(null);
 
   // Default 5 clips with individual pan offsets (Left / Center / Right framing)
   const [clips, setClips] = useState<VideoClip[]>([
@@ -332,6 +346,28 @@ export default function App() {
     return match && match[2].length === 11 ? match[2] : null;
   };
 
+  const pollYtDownloadStatus = (id: string) => {
+    if (ytPollIntervalRef.current) clearInterval(ytPollIntervalRef.current);
+    ytPollIntervalRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/youtube-download-status?id=${id}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.status === "completed") {
+          clearInterval(ytPollIntervalRef.current);
+          setYtCacheStatus({ status: "completed", progress: 100, message: "1080p stream cached & ready for 9:16 export!" });
+        } else if (data.status === "failed") {
+          clearInterval(ytPollIntervalRef.current);
+          setYtCacheStatus({ status: "failed", progress: 0, message: "YouTube direct stream blocked by bot security" });
+        } else {
+          setYtCacheStatus({ status: "downloading", progress: data.progress || 35, message: data.message });
+        }
+      } catch (e) {
+        clearInterval(ytPollIntervalRef.current);
+      }
+    }, 2500);
+  };
+
   // Load YouTube Video metadata and mount real stream
   const handleLoadYoutube = async (url: string) => {
     const id = getYoutubeId(url);
@@ -367,6 +403,21 @@ export default function App() {
           setActiveClipIndex(0);
         }
       }
+
+      // Immediately initiate server-side high-fidelity stream caching for 9:16 vertical exports
+      setYtCacheStatus({ status: "downloading", progress: 15, message: "Syncing HD stream for 9:16 export..." });
+      fetch(`/api/youtube-download?id=${id}`)
+        .then((r) => r.json())
+        .then((dlData) => {
+          if (dlData.status === "completed") {
+            setYtCacheStatus({ status: "completed", progress: 100, message: "1080p source stream ready for 9:16 vertical export" });
+          } else if (dlData.status === "failed") {
+            setYtCacheStatus({ status: "failed", progress: 0, message: dlData.message || "YouTube cloud stream blocked" });
+          } else {
+            pollYtDownloadStatus(id);
+          }
+        })
+        .catch(() => {});
     } catch (err) {
       console.warn("Could not retrieve YouTube oEmbed info:", err);
     } finally {
@@ -524,6 +575,70 @@ export default function App() {
     } catch (e) {}
   };
 
+  const handleSourceFileUploaded = async (file: File) => {
+    setIsUploadingSourceVideo(true);
+    setSourceUploadProgress(10);
+
+    const queryParam = youtubeId ? `?videoId=${encodeURIComponent(youtubeId)}` : "";
+
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", `/api/upload-video${queryParam}`);
+        xhr.setRequestHeader("Content-Type", file.type || "video/mp4");
+
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            const pct = Math.min(95, Math.max(10, Math.floor((e.loaded / e.total) * 100)));
+            setSourceUploadProgress(pct);
+          }
+        };
+
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            setSourceUploadProgress(100);
+            resolve();
+          } else {
+            reject(new Error(`Server error HTTP ${xhr.status}`));
+          }
+        };
+
+        xhr.onerror = () => reject(new Error("Network connection error during video upload"));
+        xhr.send(file);
+      });
+
+      // Update source video while preserving all custom clip framing, timestamps, and subtitles
+      setSelectedFile(file);
+      const objUrl = URL.createObjectURL(file);
+      setVideoSrc(objUrl);
+      setYtCacheStatus({
+        status: "completed",
+        progress: 100,
+        message: "Source video loaded directly!"
+      });
+      setSourceUploadModalOpen(false);
+      setDownloadSuccessMsg("Source video uploaded successfully! Rendering your 9:16 clip now...");
+
+      const targetPending = pendingExportClipIndex;
+      setPendingExportClipIndex(null);
+
+      setTimeout(() => {
+        if (targetPending === "all") {
+          handleExportAllClips();
+        } else if (targetPending === "full") {
+          handleExportFullVideo();
+        } else if (typeof targetPending === "number") {
+          handleExportClip(targetPending);
+        }
+      }, 500);
+
+    } catch (err: any) {
+      alert(`Could not upload video: ${err.message || "Upload failed"}`);
+    } finally {
+      setIsUploadingSourceVideo(false);
+    }
+  };
+
   const handleScrub = (time: number) => {
     const clamped = Math.max(0, Math.min(duration, time));
     setCurrentTime(clamped);
@@ -659,8 +774,9 @@ export default function App() {
     endTime: number,
     panOffset: number,
     filename: string,
-    targetClip?: VideoClip
-  ): Promise<boolean> => {
+    targetClip?: VideoClip,
+    clipMode: number | "all" | "full" = 0
+  ): Promise<{ success: boolean; requiresUpload?: boolean }> => {
     try {
       const res = await fetch("/api/render-clip-ffmpeg", {
         method: "POST",
@@ -670,13 +786,14 @@ export default function App() {
           endTime, 
           panOffset, 
           filename,
-          videoId: youtubeId,
+          videoId: youtubeId || (videoSrc ? undefined : "sample"),
           logoConfig: targetClip?.logoConfig,
           karaokeText: targetClip?.karaokeConfig?.enabled !== false ? targetClip?.karaokeConfig?.lines[0]?.text : undefined
         })
       });
-      if (res.ok) {
-        const data = await res.json();
+
+      const data = await res.json();
+      if (res.ok && data.success) {
         const targetUrl = data.downloadUrl || data.url;
         if (targetUrl) {
           await downloadUrlFile(
@@ -685,13 +802,22 @@ export default function App() {
             targetClip?.segmentType ? `Clip: ${targetClip.segmentType}` : "9:16 Video Clip",
             targetClip?.captions?.tiktok
           );
-          return true;
+          return { success: true };
         }
+      } else if (res.status === 409 || data.error === "VIDEO_DOWNLOADING") {
+        setDownloadSuccessMsg(`⏳ Source video stream is downloading (${data.progress || 20}%)... Please wait a few seconds and try again.`);
+        setTimeout(() => setDownloadSuccessMsg(null), 5000);
+        return { success: false };
+      } else if (res.status === 404 || data.requiresUpload) {
+        setPendingExportClipIndex(clipMode);
+        setSourceUploadReason(data.message || "YouTube direct cloud stream blocked by bot security. Upload your source video file (MP4/MOV) to render your 9:16 vertical clips — all your 5 clips, pan framing, lyrics, and watermarks are already saved!");
+        setSourceUploadModalOpen(true);
+        return { success: false, requiresUpload: true };
       }
     } catch (err) {
       console.warn("FFmpeg endpoint failed, checking client recorder fallback:", err);
     }
-    return false;
+    return { success: false };
   };
 
   // Canvas MediaRecorder fallback with baked animated karaoke subtitles
@@ -857,20 +983,26 @@ export default function App() {
       return;
     }
 
-    const ffmpegSuccess = await renderRangeViaFFmpeg(
+    const ffmpegResult = await renderRangeViaFFmpeg(
       targetClip.startTime,
       targetClip.endTime,
       targetClip.panOffset || 0,
       filename,
-      targetClip
+      targetClip,
+      index
     );
 
-    if (ffmpegSuccess) {
+    if (ffmpegResult.success) {
       setExportProgress(100);
       setDownloadSuccessMsg(`Downloaded Clip #${index + 1} in 9:16!`);
       setTimeout(() => setDownloadSuccessMsg(null), 4000);
       setExportingMode("none");
       fetchSaasData();
+      return;
+    }
+
+    if (ffmpegResult.requiresUpload) {
+      setExportingMode("none");
       return;
     }
 
@@ -925,15 +1057,22 @@ export default function App() {
       const cleanSegment = c.segmentType.toLowerCase().replace(/[^a-z0-9]+/g, "_");
       const filename = `clip_${i + 1}_${cleanSegment}_9x16.mp4`;
 
-      const ffmpegSuccess = await renderRangeViaFFmpeg(
+      const ffmpegResult = await renderRangeViaFFmpeg(
         c.startTime,
         c.endTime,
         c.panOffset || 0,
         filename,
-        c
+        c,
+        "all"
       );
 
-      if (!ffmpegSuccess && videoSrc) {
+      if (ffmpegResult.requiresUpload) {
+        setExportingMode("none");
+        setBatchProgress(null);
+        return;
+      }
+
+      if (!ffmpegResult.success && videoSrc) {
         await renderRangeViaMediaRecorder(
           c.startTime,
           c.endTime,
@@ -942,7 +1081,7 @@ export default function App() {
           (p) => setBatchProgress({ current: i + 1, total: clips.length, progress: p }),
           c
         );
-      } else if (!ffmpegSuccess) {
+      } else if (!ffmpegResult.success) {
         const summaryText = `[SocialClipper Clip ${i + 1}]\n${c.segmentType}\n${c.startTime}s - ${c.endTime}s\nCaption:\n${c.captions.tiktok}`;
         const blob = new Blob([summaryText], { type: "text/plain;charset=utf-8" });
         await downloadUrlFile(
@@ -974,20 +1113,26 @@ export default function App() {
     const activePan = clips[activeClipIndex]?.panOffset || 0;
     const filename = `full_video_9x16_vertical.mp4`;
 
-    const ffmpegSuccess = await renderRangeViaFFmpeg(
+    const ffmpegResult = await renderRangeViaFFmpeg(
       0,
       duration,
       activePan,
       filename,
-      clips[activeClipIndex]
+      clips[activeClipIndex],
+      "full"
     );
 
-    if (ffmpegSuccess) {
+    if (ffmpegResult.success) {
       setExportProgress(100);
       setDownloadSuccessMsg("Successfully downloaded entire video in 9:16!");
       setTimeout(() => setDownloadSuccessMsg(null), 5000);
       setExportingMode("none");
       fetchSaasData();
+      return;
+    }
+
+    if (ffmpegResult.requiresUpload) {
+      setExportingMode("none");
       return;
     }
 
@@ -1510,14 +1655,62 @@ export default function App() {
 
             {/* Active video metadata badge */}
             {parsedTitle && (
-              <div className="flex items-center justify-between text-xs bg-violet-50/70 border border-violet-100 rounded-xl px-3 py-2 text-violet-900">
-                <div className="flex items-center gap-2 truncate">
-                  <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
-                  <span className="font-semibold truncate">Active Video: {parsedTitle}</span>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs bg-violet-50/70 border border-violet-100 rounded-xl px-3 py-2 text-violet-900">
+                  <div className="flex items-center gap-2 truncate">
+                    <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
+                    <span className="font-semibold truncate">Active Video: {parsedTitle}</span>
+                  </div>
+                  <span className="font-mono text-[11px] text-violet-700 shrink-0 font-medium">
+                    {formatTime(duration)}
+                  </span>
                 </div>
-                <span className="font-mono text-[11px] text-violet-700 shrink-0 font-medium">
-                  {formatTime(duration)}
-                </span>
+
+                {/* Cloud Stream Download / Cache Status for YouTube */}
+                {youtubeId && !videoSrc && (
+                  <>
+                    {ytCacheStatus.status === "downloading" && (
+                      <div className="flex items-center justify-between text-xs bg-amber-50 border border-amber-200/80 rounded-xl px-3 py-2 text-amber-900">
+                        <div className="flex items-center gap-2">
+                          <div className="h-3 w-3 border-2 border-amber-600 border-t-transparent rounded-full animate-spin shrink-0"></div>
+                          <span className="font-medium text-[11px] sm:text-xs">
+                            Syncing YouTube HD stream for 9:16 export ({ytCacheStatus.progress}%)...
+                          </span>
+                        </div>
+                        <span className="text-[10px] font-mono text-amber-700">Encoding Server</span>
+                      </div>
+                    )}
+
+                    {ytCacheStatus.status === "completed" && (
+                      <div className="flex items-center justify-between text-xs bg-emerald-50 border border-emerald-200/80 rounded-xl px-3 py-2 text-emerald-900">
+                        <div className="flex items-center gap-2">
+                          <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                          <span className="font-medium text-[11px] sm:text-xs">
+                            HD video stream cached on server — ready for 9:16 vertical exports!
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {ytCacheStatus.status === "failed" && (
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs bg-rose-50 border border-rose-200/80 rounded-xl p-2.5 text-rose-900">
+                        <div className="flex items-start sm:items-center gap-2">
+                          <ShieldAlert className="h-4 w-4 text-rose-600 shrink-0 mt-0.5 sm:mt-0" />
+                          <span className="text-[11px] sm:text-xs">
+                            YouTube bot security blocked cloud scraping. Upload your source file to render your clips without losing any edits!
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setSourceUploadModalOpen(true)}
+                          className="bg-rose-600 hover:bg-rose-700 text-white font-bold px-3 py-1 rounded-lg text-xs cursor-pointer shadow-xs whitespace-nowrap self-start sm:self-auto"
+                        >
+                          Upload Source File
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             )}
           </section>
@@ -1747,6 +1940,20 @@ export default function App() {
         currentUser={currentUser}
         paypalSettings={paypalSettings}
         onSuccess={handleBookCreatorAdSuccess}
+      />
+
+      {/* Source Video Direct Upload Modal (Ensures Real 9:16 Renders When Cloud Scraping Is Blocked) */}
+      <SourceUploadModal
+        isOpen={sourceUploadModalOpen}
+        onClose={() => {
+          setSourceUploadModalOpen(false);
+          setPendingExportClipIndex(null);
+        }}
+        onFileUploaded={handleSourceFileUploaded}
+        isUploading={isUploadingSourceVideo}
+        uploadProgress={sourceUploadProgress}
+        reason={sourceUploadReason}
+        currentVideoTitle={parsedTitle}
       />
 
       {/* Clean Footer */}

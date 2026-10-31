@@ -1,5 +1,5 @@
 import { useState, useRef, FormEvent, ChangeEvent } from "react";
-import { X, Sparkles, Upload, Link, Globe, Tag, Check, AlertCircle, ArrowRight, ShieldCheck, DollarSign, Image as ImageIcon } from "lucide-react";
+import { X, Sparkles, Upload, Link, Globe, Tag, Check, AlertCircle, ArrowRight, ShieldCheck, DollarSign, Image as ImageIcon, ExternalLink } from "lucide-react";
 import { CreatorToolAd, PayPalSettings, SaaSUser } from "../types";
 
 interface CreatorAdModalProps {

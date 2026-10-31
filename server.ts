@@ -3,13 +3,14 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
-import ytdl from "@distube/ytdl-core";
+import { Ytdl, chooseFormat } from "@distube/ytdl-core";
 import { Readable } from "stream";
 import fs from "fs";
-import { exec } from "child_process";
+import { exec, spawn } from "child_process";
 import { promisify } from "util";
 
 const execPromise = promisify(exec);
+const ytdl = new Ytdl();
 
 dotenv.config();
 
@@ -102,9 +103,9 @@ app.get("/api/youtube-info", async (req, res) => {
       // Choose format and cache it proactively
       let format;
       try {
-        format = ytdl.chooseFormat(info.formats, { filter: "audioandvideo", quality: "highest" });
+        format = chooseFormat(info.formats, { filter: (f: any) => f.hasVideo && f.hasAudio, quality: "highest" });
       } catch (e) {
-        format = ytdl.chooseFormat(info.formats, { quality: "highest" });
+        format = chooseFormat(info.formats, { quality: "highest" });
       }
       if (format && format.url) {
         setCachedFormatUrl(videoId, format.url);
@@ -191,171 +192,140 @@ async function runBackgroundDownload(videoId: string) {
   const state = downloadsStatus.get(videoId);
   if (!state) return;
 
-  const tempVideoPath = path.join(DOWNLOADS_DIR, `temp_video_${videoId}.mp4`);
-  const tempAudioPath = path.join(DOWNLOADS_DIR, `temp_audio_${videoId}.mp3`);
   const finalPath = path.join(DOWNLOADS_DIR, `${videoId}.mp4`);
+  const partPath = path.join(DOWNLOADS_DIR, `${videoId}.mp4.part`);
 
+  // Check if valid cached file already exists
+  if (fs.existsSync(finalPath) && fs.statSync(finalPath).size > 102400) {
+    state.status = "completed";
+    state.progress = 100;
+    state.message = "Video source ready for 9:16 export!";
+    state.url = `/downloads/${videoId}.mp4`;
+    return;
+  }
+
+  state.status = "downloading";
+  state.progress = 15;
+  state.message = "Connecting to YouTube high-definition stream...";
+
+  // 1. Primary engine: yt-dlp with node JS challenge solver
   try {
-    state.message = "Analyzing video quality and streams...";
-    state.progress = 5;
-    
-    let info;
-    try {
-      info = await ytdl.getInfo(videoUrl);
-    } catch (ytdlErr: any) {
-      console.log("ytdl-core getInfo notice, using fallback downloader");
-      throw ytdlErr;
-    }
+    await new Promise<void>((resolve, reject) => {
+      const args = [
+        "--js-runtimes", "node",
+        "--no-playlist",
+        "-f", "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+        "--merge-output-format", "mp4",
+        "-o", finalPath,
+        videoUrl
+      ];
 
-    state.title = info.videoDetails.title;
-    state.duration = parseInt(info.videoDetails.lengthSeconds) || 120;
-    state.author = info.videoDetails.author?.name || "YouTube Creator";
+      const proc = spawn("yt-dlp", args);
 
-    // Try finding 1080p/4k video format
-    let videoFormat = info.formats.find(f => f.qualityLabel === '2160p' && !f.audioBitrate);
-    if (!videoFormat) videoFormat = info.formats.find(f => f.qualityLabel === '1440p' && !f.audioBitrate);
-    if (!videoFormat) videoFormat = info.formats.find(f => f.qualityLabel === '1080p' && !f.audioBitrate);
-    if (!videoFormat) {
-      const videoOnly = info.formats.filter(f => f.height && !f.audioBitrate);
-      if (videoOnly.length > 0) {
-        videoOnly.sort((a, b) => (b.height || 0) - (a.height || 0));
-        videoFormat = videoOnly[0];
-      }
-    }
-    if (!videoFormat) {
-      videoFormat = ytdl.chooseFormat(info.formats, { quality: "highestvideo" });
-    }
+      proc.stdout.on("data", (data) => {
+        const text = data.toString();
+        const match = text.match(/\[download\]\s+(\d+(?:\.\d+)?)%/);
+        if (match && match[1]) {
+          const pct = Math.min(95, Math.max(15, Math.floor(parseFloat(match[1]))));
+          state.progress = pct;
+          state.message = `Downloading 1080p source stream (${pct}%)...`;
+        }
+      });
 
-    const audioFormat = ytdl.chooseFormat(info.formats, { quality: "highestaudio" });
+      proc.stderr.on("data", (data) => {
+        const text = data.toString();
+        if (text.includes("ERROR:")) {
+          console.warn(`yt-dlp notice for ${videoId}:`, text.trim());
+        }
+      });
 
-    if (!videoFormat || !audioFormat) {
-      throw new Error("Could not find suitable audio/video tracks on YouTube");
-    }
+      proc.on("close", (code) => {
+        if (code === 0 && fs.existsSync(finalPath) && fs.statSync(finalPath).size > 102400) {
+          resolve();
+        } else {
+          reject(new Error(`yt-dlp exited with code ${code}`));
+        }
+      });
 
-    state.message = `Starting download of high-quality stream (Target: ${videoFormat.qualityLabel || 'UHD'})...`;
-    state.progress = 10;
-
-    const videoStream = ytdl(videoUrl, { format: videoFormat });
-    const audioStream = ytdl(videoUrl, { format: audioFormat });
-
-    let videoBytes = 0;
-    let videoTotal = 0;
-    let audioBytes = 0;
-    let audioTotal = 0;
-
-    videoStream.on("progress", (chunkLength, downloaded, total) => {
-      videoBytes = downloaded;
-      videoTotal = total;
-      const progressPercent = videoTotal ? Math.floor((videoBytes / videoTotal) * 100) : 0;
-      state.progress = Math.min(80, 10 + Math.floor(progressPercent * 0.5));
-      state.message = `Downloading 4K Ultra-HD video stream (${progressPercent}%)...`;
+      proc.on("error", (err) => {
+        reject(err);
+      });
     });
-
-    audioStream.on("progress", (chunkLength, downloaded, total) => {
-      audioBytes = downloaded;
-      audioTotal = total;
-      const progressPercent = audioTotal ? Math.floor((audioBytes / audioTotal) * 100) : 0;
-      state.progress = Math.min(80, state.progress + Math.floor(progressPercent * 0.1));
-    });
-
-    await Promise.all([
-      new Promise<void>((resolve, reject) => {
-        const dest = fs.createWriteStream(tempVideoPath);
-        videoStream.pipe(dest);
-        dest.on("finish", () => resolve());
-        dest.on("error", (err) => reject(err));
-        videoStream.on("error", (err) => reject(err));
-      }),
-      new Promise<void>((resolve, reject) => {
-        const dest = fs.createWriteStream(tempAudioPath);
-        audioStream.pipe(dest);
-        dest.on("finish", () => resolve());
-        dest.on("error", (err) => reject(err));
-        audioStream.on("error", (err) => reject(err));
-      })
-    ]);
-
-    state.status = "merging";
-    state.message = "Blending video and stereo high-fidelity audio tracks using FFmpeg...";
-    state.progress = 85;
-
-    const mergeCommand = `ffmpeg -y -i "${tempVideoPath}" -i "${tempAudioPath}" -c:v copy -c:a aac -map 0:v:0 -map 1:a:0 -shortest "${finalPath}"`;
-    await execPromise(mergeCommand);
-
-    try {
-      if (fs.existsSync(tempVideoPath)) fs.unlinkSync(tempVideoPath);
-      if (fs.existsSync(tempAudioPath)) fs.unlinkSync(tempAudioPath);
-    } catch (ce) {}
 
     state.status = "completed";
     state.progress = 100;
-    state.message = "Successfully assembled 4K Ultra-HD asset locally!";
+    state.message = "Video source ready for 9:16 vertical exports!";
     state.url = `/downloads/${videoId}.mp4`;
-
-  } catch (err: any) {
-    console.log(`ytdl stream download notice for ${videoId}: engaging failsafe fallback stream`);
-
-    state.message = "Executing high-fidelity proxy stream fallback (resolving strict bot checks)...";
-    state.progress = 50;
-
+    return;
+  } catch (ytDlpErr: any) {
+    console.log(`yt-dlp stream fetch notice for ${videoId}:`, ytDlpErr.message || ytDlpErr);
     try {
-      if (!state.title) state.title = `YouTube Stream ID: ${videoId}`;
-      if (!state.duration) state.duration = 180;
-      if (!state.author) state.author = "Cosmic Artist";
+      if (fs.existsSync(partPath)) fs.unlinkSync(partPath);
+      if (fs.existsSync(finalPath) && fs.statSync(finalPath).size <= 102400) fs.unlinkSync(finalPath);
+    } catch (e) {}
+  }
 
-      const fallbackUrls = [
-        "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
-        "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-        "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
-        "https://www.w3schools.com/html/mov_bbb.mp4"
-      ];
+  // 2. Secondary engine: Ytdl instance
+  try {
+    state.message = "Resolving stream formats...";
+    state.progress = 30;
+    const info = await ytdl.getInfo(videoUrl);
+    if (!state.title && info.videoDetails.title) state.title = info.videoDetails.title;
 
-      let res: any = null;
-      let usedUrl = "";
-      for (const fallbackUrl of fallbackUrls) {
-        try {
-          console.log(`Trying fallback URL: ${fallbackUrl}`);
-          const response = await fetch(fallbackUrl);
-          if (response.ok && response.body) {
-            res = response;
-            usedUrl = fallbackUrl;
-            break;
-          }
-        } catch (e: any) {
-          console.log(`Fallback URL ${fallbackUrl} info:`, e.message || e);
-        }
-      }
+    let videoFormat = info.formats.find(f => f.hasVideo && !f.hasAudio && f.height === 1080);
+    if (!videoFormat) videoFormat = info.formats.find(f => f.hasVideo && !f.hasAudio && f.height === 720);
+    if (!videoFormat) videoFormat = chooseFormat(info.formats, { quality: "highestvideo" });
+    const audioFormat = chooseFormat(info.formats, { quality: "highestaudio" });
 
-      if (!res || !res.body) throw new Error("All fallback stock streams are currently unavailable");
+    if (videoFormat && audioFormat) {
+      const tempV = path.join(DOWNLOADS_DIR, `temp_v_${videoId}.mp4`);
+      const tempA = path.join(DOWNLOADS_DIR, `temp_a_${videoId}.mp4`);
 
-      state.progress = 75;
-      state.message = "Saving high-fidelity video rendering matrix to server cache...";
+      const vStream = ytdl.download(info, { format: videoFormat });
+      const aStream = ytdl.download(info, { format: audioFormat });
 
-      const dest = fs.createWriteStream(finalPath);
-      const nodeStream = Readable.fromWeb(res.body as any);
-      await new Promise<void>((resolve, reject) => {
-        nodeStream.pipe(dest);
-        dest.on("finish", () => resolve());
-        dest.on("error", (err) => reject(err));
-      });
+      await Promise.all([
+        new Promise<void>((res, rej) => {
+          const dest = fs.createWriteStream(tempV);
+          vStream.pipe(dest);
+          dest.on("finish", () => res());
+          dest.on("error", rej);
+          vStream.on("error", rej);
+        }),
+        new Promise<void>((res, rej) => {
+          const dest = fs.createWriteStream(tempA);
+          aStream.pipe(dest);
+          dest.on("finish", () => res());
+          dest.on("error", rej);
+          aStream.on("error", rej);
+        })
+      ]);
+
+      state.progress = 90;
+      state.message = "Muxing video & audio with FFmpeg...";
+      await execPromise(`ffmpeg -y -i "${tempV}" -i "${tempA}" -c:v copy -c:a aac -shortest "${finalPath}"`);
 
       try {
-        if (fs.existsSync(tempVideoPath)) fs.unlinkSync(tempVideoPath);
-        if (fs.existsSync(tempAudioPath)) fs.unlinkSync(tempAudioPath);
-      } catch (ce) {}
+        if (fs.existsSync(tempV)) fs.unlinkSync(tempV);
+        if (fs.existsSync(tempA)) fs.unlinkSync(tempA);
+      } catch (e) {}
 
-      state.status = "completed";
-      state.progress = 100;
-      state.message = "Completed fallback UHD download successfully!";
-      state.url = `/downloads/${videoId}.mp4`;
-
-    } catch (fallbackErr: any) {
-      console.error("Critical fallback failure:", fallbackErr);
-      state.status = "failed";
-      state.error = fallbackErr.message || "Assembling of stream failed.";
-      state.message = "Download failed. Please try another link.";
+      if (fs.existsSync(finalPath) && fs.statSync(finalPath).size > 102400) {
+        state.status = "completed";
+        state.progress = 100;
+        state.message = "Video source ready for 9:16 vertical exports!";
+        state.url = `/downloads/${videoId}.mp4`;
+        return;
+      }
     }
+  } catch (ytdlErr: any) {
+    console.log(`ytdl secondary attempt failed for ${videoId}:`, ytdlErr.message || ytdlErr);
   }
+
+  // 3. Bot check prevention failure: Fail cleanly without substituting stock files!
+  state.status = "failed";
+  state.error = "YOUTUBE_BOT_CHECK";
+  state.message = "YouTube bot-protection prevented direct server download. Please upload the video file (MP4/MOV) directly — all your 5 clips, pan framing, lyrics, and watermarks are already saved!";
 }
 
 // REST Endpoints to start/poll the 4K download process
@@ -472,9 +442,9 @@ app.get("/api/youtube-stream", async (req, res) => {
       
       let format;
       try {
-        format = ytdl.chooseFormat(info.formats, { filter: "audioandvideo", quality: "highest" });
+        format = chooseFormat(info.formats, { filter: (f: any) => f.hasVideo && f.hasAudio, quality: "highest" });
       } catch (e) {
-        format = ytdl.chooseFormat(info.formats, { quality: "highest" });
+        format = chooseFormat(info.formats, { quality: "highest" });
       }
       
       if (!format || !format.url) {
@@ -630,11 +600,24 @@ Return the result strictly in JSON matching the specified schema format.`;
 });
 
 // Endpoint to upload user video for high-speed FFmpeg 9:16 processing
-app.post("/api/upload-video", express.raw({ type: "video/*", limit: "250mb" }), (req, res) => {
+app.post("/api/upload-video", express.raw({ type: "*/*", limit: "500mb" }), (req, res) => {
   try {
-    const filePath = path.join(DOWNLOADS_DIR, "user_video.mp4");
-    fs.writeFileSync(filePath, req.body);
-    res.json({ success: true, url: "/downloads/user_video.mp4" });
+    const videoId = req.query.videoId as string | undefined;
+    const userVideoPath = path.join(DOWNLOADS_DIR, "user_video.mp4");
+    fs.writeFileSync(userVideoPath, req.body);
+
+    if (videoId && typeof videoId === "string" && videoId.length === 11) {
+      const ytVideoPath = path.join(DOWNLOADS_DIR, `${videoId}.mp4`);
+      fs.writeFileSync(ytVideoPath, req.body);
+      downloadsStatus.set(videoId, {
+        status: "completed",
+        progress: 100,
+        message: "Source video uploaded directly!",
+        url: `/downloads/${videoId}.mp4`
+      });
+    }
+
+    res.json({ success: true, url: "/downloads/user_video.mp4", videoId });
   } catch (err: any) {
     console.error("Video upload error:", err);
     res.status(500).json({ error: "Failed to save video on server" });
@@ -670,22 +653,43 @@ app.post("/api/render-clip-ffmpeg", async (req, res) => {
       karaokeText
     } = req.body;
     
-    // Check for source video: videoId first, then user_video.mp4, then sample_music_video.mp4
-    const ytVideo = videoId ? path.join(DOWNLOADS_DIR, `${videoId}.mp4`) : null;
+    // Resolve source video:
+    // If user explicitly loaded sample video, use sample_music_video.mp4.
+    // If user provided a YouTube videoId, ONLY use that video or user uploaded video. NEVER silently fall back to sample video!
+    const isSampleMode = videoId === "sample" || (!videoId && !fs.existsSync(path.join(DOWNLOADS_DIR, "user_video.mp4")));
+    const ytVideo = videoId && videoId !== "sample" ? path.join(DOWNLOADS_DIR, `${videoId}.mp4`) : null;
     const userVideo = path.join(DOWNLOADS_DIR, "user_video.mp4");
     const sampleVideo = path.join(DOWNLOADS_DIR, "sample_music_video.mp4");
     
-    let sourceVideo = sampleVideo;
-    if (ytVideo && fs.existsSync(ytVideo)) {
+    let sourceVideo: string | null = null;
+    if (ytVideo && fs.existsSync(ytVideo) && fs.statSync(ytVideo).size > 102400) {
       sourceVideo = ytVideo;
-    } else if (fs.existsSync(userVideo)) {
+    } else if (fs.existsSync(userVideo) && fs.statSync(userVideo).size > 102400) {
       sourceVideo = userVideo;
-    } else if (fs.existsSync(sampleVideo)) {
+    } else if (isSampleMode && fs.existsSync(sampleVideo)) {
       sourceVideo = sampleVideo;
     }
 
-    if (!fs.existsSync(sourceVideo)) {
-      return res.status(404).json({ error: "Source video not ready on server" });
+    if (!sourceVideo) {
+      if (videoId && videoId !== "sample") {
+        const dlState = downloadsStatus.get(videoId);
+        if (dlState && (dlState.status === "downloading" || dlState.status === "merging")) {
+          return res.status(409).json({
+            success: false,
+            error: "VIDEO_DOWNLOADING",
+            status: dlState.status,
+            progress: dlState.progress,
+            message: `YouTube video is currently caching on the server (${dlState.progress}%). Please wait a few seconds and try again.`
+          });
+        }
+      }
+
+      return res.status(404).json({
+        success: false,
+        error: "SOURCE_VIDEO_NOT_FOUND",
+        requiresUpload: true,
+        message: "YouTube bot protection or network restrictions prevented direct cloud downloading of this video. Upload your source video file (MP4/MOV) below to render your vertical clips — all your 5 clips, pan framing, lyrics, and watermarks are already saved!"
+      });
     }
 
     const cleanName = `${Date.now()}_${filename.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
