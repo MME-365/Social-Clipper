@@ -1,4 +1,4 @@
-import { useState, FormEvent } from "react";
+import { useState, FormEvent, useEffect } from "react";
 import {
   DollarSign,
   Users,
@@ -15,9 +15,29 @@ import {
   Sliders,
   Sparkles,
   Globe,
-  Trash2
+  Trash2,
+  UserPlus,
+  Pencil,
+  FileText,
+  X,
+  Calendar,
+  Lock,
+  Unlock,
+  Filter,
+  CheckCircle2,
+  Activity,
+  ArrowUpDown
 } from "lucide-react";
-import { AdminOverview, PlanConfig, PayPalSettings, OneTimePack, DEFAULT_ONE_TIME_PACKS, CreatorToolAd } from "../types";
+import {
+  AdminOverview,
+  PlanConfig,
+  PayPalSettings,
+  OneTimePack,
+  DEFAULT_ONE_TIME_PACKS,
+  CreatorToolAd,
+  SaaSUser,
+  SaaSTransaction
+} from "../types";
 
 interface AdminPanelProps {
   overview: AdminOverview;
@@ -26,7 +46,21 @@ interface AdminPanelProps {
     paypalSettings: PayPalSettings,
     newPacks?: OneTimePack[]
   ) => Promise<void>;
-  onUpdateUser: (email: string, tier?: "free" | "creator" | "enterprise", resetDownloads?: boolean) => Promise<void>;
+  onUpdateUser: (
+    email: string,
+    updatesOrTier?: any,
+    resetDownloads?: boolean
+  ) => Promise<void>;
+  onCreateUser?: (payload: {
+    email: string;
+    name?: string;
+    tier?: "free" | "creator" | "enterprise" | "pack";
+    downloadsLimit?: number;
+    downloadsUsed?: number;
+    billingCycle?: "monthly" | "annual";
+    status?: "active" | "suspended";
+  }) => Promise<void>;
+  onDeleteUser?: (email: string) => Promise<void>;
   onRefreshAds?: () => void;
 }
 
@@ -34,6 +68,8 @@ export function AdminPanel({
   overview,
   onUpdateConfig,
   onUpdateUser,
+  onCreateUser,
+  onDeleteUser,
   onRefreshAds
 }: AdminPanelProps) {
   const [plans, setPlans] = useState(overview.plans);
@@ -46,7 +82,46 @@ export function AdminPanel({
   const [ads, setAds] = useState<CreatorToolAd[]>(overview.creatorAds || []);
   const [savingStatus, setSavingStatus] = useState<string | null>(null);
   const [userSearch, setUserSearch] = useState("");
+  const [tierFilter, setTierFilter] = useState<"all" | "free" | "creator" | "enterprise" | "pack" | "suspended">("all");
   const [activeTab, setActiveTab] = useState<"pricing" | "paypal" | "transactions" | "users" | "creatorAds">("pricing");
+
+  // User management modals & forms
+  const [showAddUserModal, setShowAddUserModal] = useState(false);
+  const [editingUser, setEditingUser] = useState<SaaSUser | null>(null);
+  const [viewingTxUser, setViewingTxUser] = useState<SaaSUser | null>(null);
+  const [deletingUser, setDeletingUser] = useState<SaaSUser | null>(null);
+  const [userActionError, setUserActionError] = useState<string | null>(null);
+  const [userActionSuccess, setUserActionSuccess] = useState<string | null>(null);
+  const [isSubmittingUserAction, setIsSubmittingUserAction] = useState(false);
+
+  // New user form state
+  const [newEmail, setNewEmail] = useState("");
+  const [newName, setNewName] = useState("");
+  const [newTier, setNewTier] = useState<"free" | "creator" | "enterprise" | "pack">("free");
+  const [newBillingCycle, setNewBillingCycle] = useState<"monthly" | "annual">("monthly");
+  const [newDownloadLimit, setNewDownloadLimit] = useState(3);
+  const [newDownloadsUsed, setNewDownloadsUsed] = useState(0);
+  const [newStatus, setNewStatus] = useState<"active" | "suspended">("active");
+
+  // Edit user form state
+  const [editName, setEditName] = useState("");
+  const [editTier, setEditTier] = useState<"free" | "creator" | "enterprise" | "pack">("free");
+  const [editBillingCycle, setEditBillingCycle] = useState<"monthly" | "annual">("monthly");
+  const [editDownloadLimit, setEditDownloadLimit] = useState(3);
+  const [editDownloadsUsed, setEditDownloadsUsed] = useState(0);
+  const [editCycleResetDate, setEditCycleResetDate] = useState("");
+  const [editStatus, setEditStatus] = useState<"active" | "suspended">("active");
+
+  useEffect(() => {
+    setPlans(overview.plans);
+    setPaypalSettings(overview.paypalSettings);
+    if (overview.oneTimePacks && overview.oneTimePacks.length > 0) {
+      setPacks(overview.oneTimePacks);
+    }
+    if (overview.creatorAds) {
+      setAds(overview.creatorAds);
+    }
+  }, [overview]);
 
   const handleSaveConfig = async (e: FormEvent) => {
     e.preventDefault();
@@ -61,11 +136,146 @@ export function AdminPanel({
     }
   };
 
-  const filteredUsers = overview.users.filter(
-    (u) =>
+  const filteredUsers = overview.users.filter((u) => {
+    const matchesSearch =
       u.email.toLowerCase().includes(userSearch.toLowerCase()) ||
-      u.name.toLowerCase().includes(userSearch.toLowerCase())
-  );
+      u.name.toLowerCase().includes(userSearch.toLowerCase());
+    if (!matchesSearch) return false;
+
+    if (tierFilter === "all") return true;
+    if (tierFilter === "suspended") return u.status === "suspended";
+    return u.tier === tierFilter;
+  });
+
+  const showToast = (msg: string, isError = false) => {
+    if (isError) {
+      setUserActionError(msg);
+      setUserActionSuccess(null);
+      setTimeout(() => setUserActionError(null), 4000);
+    } else {
+      setUserActionSuccess(msg);
+      setUserActionError(null);
+      setTimeout(() => setUserActionSuccess(null), 4000);
+    }
+  };
+
+  const handleOpenAddUser = () => {
+    setNewEmail("");
+    setNewName("");
+    setNewTier("free");
+    setNewBillingCycle("monthly");
+    setNewDownloadLimit(overview.plans.free.downloadLimit || 3);
+    setNewDownloadsUsed(0);
+    setNewStatus("active");
+    setShowAddUserModal(true);
+  };
+
+  const handleTierChangeInAddForm = (tier: "free" | "creator" | "enterprise" | "pack") => {
+    setNewTier(tier);
+    if (tier === "free") setNewDownloadLimit(overview.plans.free.downloadLimit || 3);
+    else if (tier === "creator") setNewDownloadLimit(overview.plans.creator.downloadLimit || 35);
+    else if (tier === "enterprise") setNewDownloadLimit(overview.plans.enterprise.downloadLimit || 120);
+    else if (tier === "pack") setNewDownloadLimit(65);
+  };
+
+  const handleCreateUserSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!newEmail || !newEmail.includes("@")) {
+      showToast("Please enter a valid email address.", true);
+      return;
+    }
+    setIsSubmittingUserAction(true);
+    try {
+      if (onCreateUser) {
+        await onCreateUser({
+          email: newEmail.trim().toLowerCase(),
+          name: newName.trim(),
+          tier: newTier,
+          billingCycle: newBillingCycle,
+          downloadsLimit: Number(newDownloadLimit),
+          downloadsUsed: Number(newDownloadsUsed),
+          status: newStatus
+        });
+      } else {
+        await onUpdateUser(newEmail.trim().toLowerCase(), {
+          tier: newTier,
+          name: newName.trim(),
+          downloadsLimit: Number(newDownloadLimit),
+          downloadsUsed: Number(newDownloadsUsed),
+          billingCycle: newBillingCycle,
+          status: newStatus
+        });
+      }
+      showToast(`User account for ${newEmail} created successfully.`);
+      setShowAddUserModal(false);
+    } catch (err: any) {
+      showToast(err.message || "Failed to create user account.", true);
+    } finally {
+      setIsSubmittingUserAction(false);
+    }
+  };
+
+  const handleOpenEditUser = (user: SaaSUser) => {
+    setEditingUser(user);
+    setEditName(user.name || "");
+    setEditTier(user.tier || "free");
+    setEditBillingCycle(user.billingCycle || "monthly");
+    setEditDownloadLimit(user.downloadsLimit);
+    setEditDownloadsUsed(user.downloadsUsed);
+    setEditCycleResetDate(user.cycleResetDate ? user.cycleResetDate.split("T")[0] : "");
+    setEditStatus(user.status || "active");
+  };
+
+  const handleSaveEditUser = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!editingUser) return;
+    setIsSubmittingUserAction(true);
+    try {
+      await onUpdateUser(editingUser.email, {
+        name: editName.trim(),
+        tier: editTier,
+        billingCycle: editBillingCycle,
+        downloadsLimit: Number(editDownloadLimit),
+        downloadsUsed: Number(editDownloadsUsed),
+        cycleResetDate: editCycleResetDate ? new Date(editCycleResetDate).toISOString() : undefined,
+        status: editStatus
+      });
+      showToast(`User account ${editingUser.email} updated successfully.`);
+      setEditingUser(null);
+    } catch (err: any) {
+      showToast(err.message || "Failed to update user.", true);
+    } finally {
+      setIsSubmittingUserAction(false);
+    }
+  };
+
+  const handleResetQuota = async (user: SaaSUser) => {
+    setIsSubmittingUserAction(true);
+    try {
+      await onUpdateUser(user.email, undefined, true);
+      showToast(`Download quota reset to 0 for ${user.email}.`);
+    } catch (err: any) {
+      showToast(err.message || "Failed to reset download quota.", true);
+    } finally {
+      setIsSubmittingUserAction(false);
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deletingUser) return;
+    setIsSubmittingUserAction(true);
+    try {
+      if (onDeleteUser) {
+        await onDeleteUser(deletingUser.email);
+      }
+      showToast(`User ${deletingUser.email} has been deleted.`);
+      setDeletingUser(null);
+    } catch (err: any) {
+      showToast(err.message || "Failed to delete user.", true);
+    } finally {
+      setIsSubmittingUserAction(false);
+    }
+  };
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-6 space-y-6 animate-fade-in">
@@ -940,76 +1150,335 @@ export function AdminPanel({
 
       {/* Tab 4: User Accounts Manager */}
       {activeTab === "users" && (
-        <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-xs space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-xs space-y-6">
+          {/* Header & Quick Actions */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-5">
             <div>
-              <h3 className="font-display font-bold text-base text-slate-900">
-                User Accounts & Tier Management
-              </h3>
-              <p className="text-xs text-slate-500">Adjust user subscriptions, override tiers, and reset monthly download quotas.</p>
+              <div className="flex items-center gap-2">
+                <h3 className="font-display font-bold text-base text-slate-900">
+                  User Accounts & Quota Manager
+                </h3>
+                <span className="text-[11px] font-bold bg-violet-100 text-violet-800 px-2.5 py-0.5 rounded-full">
+                  {overview.users.length} Total Users
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Manage user tiers, custom video quotas, cycle renewals, account status, and view payment transaction history.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2.5">
+              <button
+                type="button"
+                onClick={handleOpenAddUser}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-bold text-xs shadow-xs transition cursor-pointer"
+              >
+                <UserPlus className="h-3.5 w-3.5" />
+                <span>Add New User</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Toast Notification Banner */}
+          {userActionSuccess && (
+            <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-semibold flex items-center justify-between animate-fade-in">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                <span>{userActionSuccess}</span>
+              </div>
+              <button type="button" onClick={() => setUserActionSuccess(null)} className="text-emerald-700 hover:text-emerald-900">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
+
+          {userActionError && (
+            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs font-semibold flex items-center justify-between animate-fade-in">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 text-rose-600 shrink-0" />
+                <span>{userActionError}</span>
+              </div>
+              <button type="button" onClick={() => setUserActionError(null)} className="text-rose-700 hover:text-rose-900">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
+
+          {/* Filter Pills & Search Bar */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-1.5 text-xs font-semibold">
+              <button
+                type="button"
+                onClick={() => setTierFilter("all")}
+                className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
+                  tierFilter === "all"
+                    ? "bg-slate-900 text-white"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
+              >
+                All Users ({overview.users.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setTierFilter("free")}
+                className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
+                  tierFilter === "free"
+                    ? "bg-slate-700 text-white"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
+              >
+                Free ({overview.users.filter((u) => u.tier === "free").length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setTierFilter("creator")}
+                className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
+                  tierFilter === "creator"
+                    ? "bg-violet-600 text-white"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
+              >
+                Creator ({overview.users.filter((u) => u.tier === "creator").length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setTierFilter("enterprise")}
+                className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
+                  tierFilter === "enterprise"
+                    ? "bg-amber-600 text-white"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
+              >
+                Enterprise ({overview.users.filter((u) => u.tier === "enterprise").length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setTierFilter("pack")}
+                className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
+                  tierFilter === "pack"
+                    ? "bg-blue-600 text-white"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
+              >
+                Packs ({overview.users.filter((u) => u.tier === "pack").length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setTierFilter("suspended")}
+                className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
+                  tierFilter === "suspended"
+                    ? "bg-rose-600 text-white"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
+              >
+                Suspended ({overview.users.filter((u) => u.status === "suspended").length})
+              </button>
             </div>
 
             <div className="relative">
+              <Search className="h-3.5 w-3.5 text-slate-400 absolute left-3 top-2.5" />
               <input
                 type="text"
                 value={userSearch}
                 onChange={(e) => setUserSearch(e.target.value)}
-                placeholder="Search user email..."
-                className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:bg-white focus:outline-none w-52"
+                placeholder="Search user name or email..."
+                className="bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-8 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-violet-500 w-full md:w-64"
               />
+              {userSearch && (
+                <button
+                  type="button"
+                  onClick={() => setUserSearch("")}
+                  className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
             </div>
           </div>
 
-          <div className="overflow-x-auto">
+          {/* User Table */}
+          <div className="overflow-x-auto border border-slate-200/80 rounded-xl">
             <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 border-y border-slate-200 text-slate-600 font-semibold">
+              <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider text-[10px]">
                 <tr>
-                  <th className="py-2.5 px-3">User</th>
-                  <th className="py-2.5 px-3">Current Tier</th>
-                  <th className="py-2.5 px-3">Usage</th>
-                  <th className="py-2.5 px-3">Lifetime Videos</th>
-                  <th className="py-2.5 px-3">Actions</th>
+                  <th className="py-3 px-3.5">User</th>
+                  <th className="py-3 px-3">Subscription Tier</th>
+                  <th className="py-3 px-3">Quota Usage</th>
+                  <th className="py-3 px-3">Status</th>
+                  <th className="py-3 px-3">Lifetime Videos</th>
+                  <th className="py-3 px-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredUsers.map((u) => (
-                  <tr key={u.id} className="hover:bg-slate-50/50">
-                    <td className="py-3 px-3">
-                      <div className="font-bold text-slate-900">{u.name}</div>
-                      <div className="text-slate-500 font-mono text-[11px]">{u.email}</div>
-                    </td>
-                    <td className="py-3 px-3">
-                      <select
-                        value={u.tier}
-                        onChange={(e) => onUpdateUser(u.email, e.target.value as any)}
-                        className="bg-slate-100 border border-slate-200 rounded-lg px-2 py-1 text-xs font-semibold text-slate-800 cursor-pointer"
-                      >
-                        <option value="free">Free Starter</option>
-                        <option value="creator">Creator ($9/mo)</option>
-                        <option value="enterprise">Enterprise ($99/mo)</option>
-                      </select>
-                    </td>
-                    <td className="py-3 px-3">
-                      <div className="font-semibold text-slate-800">
-                        {u.downloadsUsed} / {u.downloadsLimit}
-                      </div>
-                      <div className="text-[10px] text-slate-400">
-                        {u.downloadsLimit - u.downloadsUsed} remaining
-                      </div>
-                    </td>
-                    <td className="py-3 px-3 font-mono text-slate-700">{u.totalVideosProcessed || 0}</td>
-                    <td className="py-3 px-3">
-                      <button
-                        type="button"
-                        onClick={() => onUpdateUser(u.email, undefined, true)}
-                        className="px-2.5 py-1 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-700 text-[11px] font-semibold transition cursor-pointer"
-                        title="Reset downloads used to 0"
-                      >
-                        Reset Quota
-                      </button>
+                {filteredUsers.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-12 text-center text-slate-400">
+                      <Users className="h-8 w-8 mx-auto mb-2 text-slate-300" />
+                      <p className="font-semibold text-slate-600">No users match your filter criteria.</p>
+                      <p className="text-[11px] text-slate-400 mt-0.5">Try searching for a different keyword or switch the tier filter tab.</p>
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  filteredUsers.map((u) => {
+                    const usagePercent = Math.min(100, Math.round((u.downloadsUsed / Math.max(1, u.downloadsLimit)) * 100));
+                    const isLimitReached = u.downloadsUsed >= u.downloadsLimit;
+                    const isSuspended = u.status === "suspended";
+
+                    return (
+                      <tr key={u.id} className="hover:bg-slate-50/70 transition">
+                        {/* User Identity Column */}
+                        <td className="py-3 px-3.5">
+                          <div className="flex items-center gap-2.5">
+                            <div className="h-8 w-8 rounded-full bg-linear-to-br from-violet-500 to-indigo-600 text-white font-bold text-xs flex items-center justify-center shrink-0 uppercase shadow-2xs">
+                              {u.name ? u.name.charAt(0) : u.email.charAt(0)}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="font-bold text-slate-900 truncate flex items-center gap-1.5">
+                                <span>{u.name || u.email.split("@")[0]}</span>
+                                {u.authProvider === "google" && (
+                                  <span className="text-[9px] bg-blue-50 text-blue-700 px-1.5 py-0.2 rounded font-mono font-medium">
+                                    Google
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-slate-500 font-mono text-[11px] truncate">{u.email}</div>
+                              {u.joinedDate && (
+                                <div className="text-[10px] text-slate-400">
+                                  Joined {new Date(u.joinedDate).toLocaleDateString()}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Subscription Tier Column */}
+                        <td className="py-3 px-3">
+                          <div className="space-y-1">
+                            <select
+                              value={u.tier}
+                              onChange={(e) => onUpdateUser(u.email, e.target.value as any)}
+                              className={`text-xs font-bold rounded-lg px-2.5 py-1 border cursor-pointer focus:outline-none ${
+                                u.tier === "enterprise"
+                                  ? "bg-amber-50 border-amber-300 text-amber-800"
+                                  : u.tier === "creator"
+                                  ? "bg-violet-50 border-violet-300 text-violet-800"
+                                  : u.tier === "pack"
+                                  ? "bg-blue-50 border-blue-300 text-blue-800"
+                                  : "bg-slate-100 border-slate-200 text-slate-700"
+                              }`}
+                            >
+                              <option value="free">Free Starter</option>
+                              <option value="creator">Creator ($9/mo)</option>
+                              <option value="enterprise">Enterprise ($99/mo)</option>
+                              <option value="pack">One-Time Pack</option>
+                            </select>
+                            <div className="text-[10px] text-slate-400 flex items-center gap-1">
+                              <span>Cycle: </span>
+                              <strong className="text-slate-600 capitalize">{u.billingCycle || "monthly"}</strong>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Quota Usage Column */}
+                        <td className="py-3 px-3 min-w-[140px]">
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-between text-[11px]">
+                              <span className={`font-bold ${isLimitReached ? "text-rose-600" : "text-slate-800"}`}>
+                                {u.downloadsUsed} / {u.downloadsLimit}
+                              </span>
+                              <span className="text-slate-400 font-mono text-[10px]">
+                                {Math.max(0, u.downloadsLimit - u.downloadsUsed)} left
+                              </span>
+                            </div>
+                            <div className="w-full h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all ${
+                                  isLimitReached
+                                    ? "bg-rose-500"
+                                    : usagePercent > 75
+                                    ? "bg-amber-500"
+                                    : "bg-violet-600"
+                                }`}
+                                style={{ width: `${usagePercent}%` }}
+                              />
+                            </div>
+                            {u.cycleResetDate && (
+                              <div className="text-[10px] text-slate-400">
+                                Resets {new Date(u.cycleResetDate).toLocaleDateString()}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Account Status Column */}
+                        <td className="py-3 px-3">
+                          {isSuspended ? (
+                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-rose-50 border border-rose-200 text-[10px] font-bold text-rose-700">
+                              <span className="h-1.5 w-1.5 rounded-full bg-rose-500"></span>
+                              Suspended
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-[10px] font-bold text-emerald-700">
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+                              Active
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Lifetime Videos */}
+                        <td className="py-3 px-3 font-mono text-slate-700 font-bold">
+                          {u.totalVideosProcessed || 0}
+                        </td>
+
+                        {/* Actions Toolbar */}
+                        <td className="py-3 px-3 text-right">
+                          <div className="inline-flex items-center gap-1">
+                            {/* Edit User Modal */}
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditUser(u)}
+                              className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-700 transition cursor-pointer"
+                              title="Edit user details, custom download limits, and renewal dates"
+                            >
+                              <Pencil className="h-3.5 w-3.5 text-slate-600" />
+                            </button>
+
+                            {/* Reset Quota to 0 */}
+                            <button
+                              type="button"
+                              onClick={() => handleResetQuota(u)}
+                              disabled={isSubmittingUserAction}
+                              className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-700 transition cursor-pointer"
+                              title="1-click Reset download quota used to 0"
+                            >
+                              <RefreshCw className="h-3.5 w-3.5 text-violet-600" />
+                            </button>
+
+                            {/* View Transactions Modal */}
+                            <button
+                              type="button"
+                              onClick={() => setViewingTxUser(u)}
+                              className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-700 transition cursor-pointer"
+                              title="View user PayPal orders and transaction receipts"
+                            >
+                              <FileText className="h-3.5 w-3.5 text-emerald-600" />
+                            </button>
+
+                            {/* Delete User */}
+                            <button
+                              type="button"
+                              onClick={() => setDeletingUser(u)}
+                              className="p-1.5 rounded-lg border border-slate-200 hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition cursor-pointer"
+                              title="Delete user account"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
@@ -1112,6 +1581,499 @@ export function AdminPanel({
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 1: Add New User Account */}
+      {showAddUserModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white rounded-2xl max-w-lg w-full border border-slate-200 shadow-2xl p-6 space-y-5 animate-scale-in">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-violet-100 text-violet-700">
+                  <UserPlus className="h-5 w-5" />
+                </div>
+                <div>
+                  <h4 className="font-display font-bold text-base text-slate-900">Add New User Account</h4>
+                  <p className="text-xs text-slate-500">Create a registered user account with custom plan quotas.</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddUserModal(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateUserSubmit} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1 sm:col-span-2">
+                  <label className="text-xs font-bold text-slate-700">Email Address *</label>
+                  <input
+                    type="email"
+                    required
+                    value={newEmail}
+                    onChange={(e) => setNewEmail(e.target.value)}
+                    placeholder="user@example.com"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-violet-500"
+                  />
+                </div>
+
+                <div className="space-y-1 sm:col-span-2">
+                  <label className="text-xs font-bold text-slate-700">Display Name / Handle</label>
+                  <input
+                    type="text"
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    placeholder="Alex Johnson (optional)"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-violet-500"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700">Subscription Tier</label>
+                  <select
+                    value={newTier}
+                    onChange={(e) => handleTierChangeInAddForm(e.target.value as any)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 font-semibold focus:bg-white focus:outline-none focus:ring-1 focus:ring-violet-500 cursor-pointer"
+                  >
+                    <option value="free">Free Starter (3 downloads)</option>
+                    <option value="creator">Creator ($9/mo — 35 downloads)</option>
+                    <option value="enterprise">Enterprise ($99/mo — 120 downloads)</option>
+                    <option value="pack">One-Time Pack</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700">Billing Cycle</label>
+                  <select
+                    value={newBillingCycle}
+                    onChange={(e) => setNewBillingCycle(e.target.value as any)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 font-semibold focus:bg-white focus:outline-none focus:ring-1 focus:ring-violet-500 cursor-pointer"
+                  >
+                    <option value="monthly">Monthly Cycle</option>
+                    <option value="annual">Annual Cycle (365 days)</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700">Downloads Limit</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="10000"
+                    value={newDownloadLimit}
+                    onChange={(e) => setNewDownloadLimit(parseInt(e.target.value) || 0)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 font-mono focus:bg-white focus:outline-none focus:ring-1 focus:ring-violet-500"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700">Initial Used Downloads</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="10000"
+                    value={newDownloadsUsed}
+                    onChange={(e) => setNewDownloadsUsed(parseInt(e.target.value) || 0)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 font-mono focus:bg-white focus:outline-none focus:ring-1 focus:ring-violet-500"
+                  />
+                </div>
+
+                <div className="space-y-1 sm:col-span-2">
+                  <label className="text-xs font-bold text-slate-700">Initial Account Status</label>
+                  <div className="flex items-center gap-4 pt-1">
+                    <label className="flex items-center gap-1.5 text-xs text-slate-800 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="newStatus"
+                        value="active"
+                        checked={newStatus === "active"}
+                        onChange={() => setNewStatus("active")}
+                        className="text-violet-600 focus:ring-violet-500"
+                      />
+                      <span>Active (Normal access)</span>
+                    </label>
+                    <label className="flex items-center gap-1.5 text-xs text-slate-800 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="newStatus"
+                        value="suspended"
+                        checked={newStatus === "suspended"}
+                        onChange={() => setNewStatus("suspended")}
+                        className="text-rose-600 focus:ring-rose-500"
+                      />
+                      <span>Suspended (Blocked access)</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowAddUserModal(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-semibold transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingUserAction}
+                  className="px-5 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-bold text-xs shadow-xs transition cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {isSubmittingUserAction ? (
+                    <>
+                      <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                      <span>Creating...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="h-3.5 w-3.5" />
+                      <span>Create User Account</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 2: Edit User Details & Quota */}
+      {editingUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white rounded-2xl max-w-lg w-full border border-slate-200 shadow-2xl p-6 space-y-5 animate-scale-in">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-violet-100 text-violet-700">
+                  <Pencil className="h-5 w-5" />
+                </div>
+                <div>
+                  <h4 className="font-display font-bold text-base text-slate-900">Edit User Account</h4>
+                  <p className="text-xs text-slate-500 font-mono">{editingUser.email}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingUser(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditUser} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1 sm:col-span-2">
+                  <label className="text-xs font-bold text-slate-700">Full Name</label>
+                  <input
+                    type="text"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-violet-500"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700">Subscription Tier</label>
+                  <select
+                    value={editTier}
+                    onChange={(e) => setEditTier(e.target.value as any)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 font-semibold focus:bg-white focus:outline-none focus:ring-1 focus:ring-violet-500 cursor-pointer"
+                  >
+                    <option value="free">Free Starter</option>
+                    <option value="creator">Creator ($9/mo)</option>
+                    <option value="enterprise">Enterprise ($99/mo)</option>
+                    <option value="pack">One-Time Pack</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700">Billing Cycle</label>
+                  <select
+                    value={editBillingCycle}
+                    onChange={(e) => setEditBillingCycle(e.target.value as any)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 font-semibold focus:bg-white focus:outline-none focus:ring-1 focus:ring-violet-500 cursor-pointer"
+                  >
+                    <option value="monthly">Monthly Cycle</option>
+                    <option value="annual">Annual Cycle</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700">Downloads Limit (Custom)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="10000"
+                    value={editDownloadLimit}
+                    onChange={(e) => setEditDownloadLimit(parseInt(e.target.value) || 0)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 font-mono font-bold focus:bg-white focus:outline-none focus:ring-1 focus:ring-violet-500"
+                  />
+                  <p className="text-[10px] text-slate-400">Override quota for VIP allowance</p>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700">Downloads Used</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="10000"
+                    value={editDownloadsUsed}
+                    onChange={(e) => setEditDownloadsUsed(parseInt(e.target.value) || 0)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 font-mono font-bold focus:bg-white focus:outline-none focus:ring-1 focus:ring-violet-500"
+                  />
+                  <p className="text-[10px] text-slate-400">Set to 0 to grant a fresh quota</p>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700">Cycle Reset Date</label>
+                  <input
+                    type="date"
+                    value={editCycleResetDate}
+                    onChange={(e) => setEditCycleResetDate(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 font-mono focus:bg-white focus:outline-none focus:ring-1 focus:ring-violet-500"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700">Account Access Status</label>
+                  <select
+                    value={editStatus}
+                    onChange={(e) => setEditStatus(e.target.value as any)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 font-semibold focus:bg-white focus:outline-none focus:ring-1 focus:ring-violet-500 cursor-pointer"
+                  >
+                    <option value="active">Active (Normal Access)</option>
+                    <option value="suspended">Suspended (Access Blocked)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditDownloadsUsed(0);
+                    showToast("Downloads used reset to 0 in form. Click Save Changes to confirm.");
+                  }}
+                  className="px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-[11px] font-semibold text-slate-700 cursor-pointer"
+                >
+                  Reset Quota to 0
+                </button>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingUser(null)}
+                    className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-semibold transition cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmittingUserAction}
+                    className="px-5 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-bold text-xs shadow-xs transition cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                  >
+                    {isSubmittingUserAction ? (
+                      <>
+                        <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                        <span>Saving...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="h-3.5 w-3.5" />
+                        <span>Save Changes</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 3: User Transactions & Payment History */}
+      {viewingTxUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white rounded-2xl max-w-2xl w-full border border-slate-200 shadow-2xl p-6 space-y-5 animate-scale-in">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-emerald-100 text-emerald-700">
+                  <FileText className="h-5 w-5" />
+                </div>
+                <div>
+                  <h4 className="font-display font-bold text-base text-slate-900">
+                    Payment & Invoice History
+                  </h4>
+                  <p className="text-xs text-slate-500 font-mono">{viewingTxUser.email}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewingTxUser(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Quick Summary Cards */}
+            {(() => {
+              const userTxs = overview.transactions.filter(
+                (t) => t.userEmail.toLowerCase() === viewingTxUser.email.toLowerCase()
+              );
+              const totalSpent = userTxs
+                .filter((t) => t.status === "completed")
+                .reduce((acc, t) => acc + t.amount, 0);
+
+              return (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                        Total Spent
+                      </span>
+                      <span className="text-lg font-black text-slate-900">${totalSpent}</span>
+                    </div>
+                    <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                        Completed Orders
+                      </span>
+                      <span className="text-lg font-black text-slate-900">{userTxs.length}</span>
+                    </div>
+                    <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                        Current Tier
+                      </span>
+                      <span className="text-sm font-bold text-violet-700 capitalize">
+                        {viewingTxUser.tier} ({viewingTxUser.billingCycle || "monthly"})
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold uppercase text-[10px]">
+                        <tr>
+                          <th className="py-2.5 px-3">Date</th>
+                          <th className="py-2.5 px-3">Package / Service</th>
+                          <th className="py-2.5 px-3">Amount</th>
+                          <th className="py-2.5 px-3">Status</th>
+                          <th className="py-2.5 px-3">PayPal Reference</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {userTxs.length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className="py-8 text-center text-slate-400">
+                              <p className="font-semibold text-slate-600">No payment records found.</p>
+                              <p className="text-[11px] text-slate-400 mt-0.5">This user has not completed any paid PayPal transactions yet.</p>
+                            </td>
+                          </tr>
+                        ) : (
+                          userTxs.map((tx) => (
+                            <tr key={tx.id} className="hover:bg-slate-50/50">
+                              <td className="py-2.5 px-3 font-mono text-slate-600">
+                                {new Date(tx.date).toLocaleDateString()}
+                              </td>
+                              <td className="py-2.5 px-3 font-bold text-slate-900 capitalize">
+                                {tx.plan}
+                              </td>
+                              <td className="py-2.5 px-3 font-extrabold text-slate-900">
+                                ${tx.amount}
+                              </td>
+                              <td className="py-2.5 px-3">
+                                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+                                  {tx.status}
+                                </span>
+                              </td>
+                              <td className="py-2.5 px-3 font-mono text-slate-400 text-[10px]">
+                                {tx.paypalTransactionId}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              );
+            })()}
+
+            <div className="flex justify-end pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setViewingTxUser(null)}
+                className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs transition cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 4: Delete User Confirmation */}
+      {deletingUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white rounded-2xl max-w-md w-full border border-slate-200 shadow-2xl p-6 space-y-4 animate-scale-in">
+            <div className="flex items-center gap-3">
+              <div className="p-3 rounded-2xl bg-rose-100 text-rose-700">
+                <Trash2 className="h-6 w-6" />
+              </div>
+              <div>
+                <h4 className="font-display font-bold text-base text-slate-900">Delete User Account</h4>
+                <p className="text-xs text-slate-500">This action is irreversible.</p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1 text-xs">
+              <div className="text-slate-600">
+                Are you sure you want to delete the account for:
+              </div>
+              <div className="font-mono font-bold text-slate-900">{deletingUser.email}</div>
+              <div className="text-slate-500 text-[11px]">
+                Tier: <strong className="capitalize">{deletingUser.tier}</strong> | Downloads: {deletingUser.downloadsUsed}/{deletingUser.downloadsLimit}
+              </div>
+            </div>
+
+            <p className="text-xs text-rose-600 leading-relaxed">
+              Deleting this user will permanently remove their profile and quota data. Their past transaction records will be retained in audit logs.
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setDeletingUser(null)}
+                className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-semibold transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={isSubmittingUserAction}
+                className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-xs transition cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {isSubmittingUserAction ? (
+                  <>
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="h-3.5 w-3.5" />
+                    <span>Confirm Delete</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

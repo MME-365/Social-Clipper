@@ -888,22 +888,99 @@ app.get("/api/saas/admin/overview", (req, res) => {
 });
 
 app.post("/api/saas/admin/update-user", (req, res) => {
-  const { email, tier, resetDownloads, adminEmail } = req.body;
+  const {
+    email,
+    tier,
+    resetDownloads,
+    downloadsLimit,
+    downloadsUsed,
+    name,
+    billingCycle,
+    cycleResetDate,
+    status,
+    adminEmail
+  } = req.body;
   const verifiedAdmin = (adminEmail || (req.headers["x-user-email"] as string) || "").trim().toLowerCase();
 
   if (verifiedAdmin && !ADMIN_EMAILS.includes(verifiedAdmin)) {
     return res.status(403).json({ error: "Access denied. Only authorized Google admin accounts can modify user state." });
   }
 
-  if (!email) return res.status(400).json({ error: "Email required" });
-  
-  if (tier) {
-    saasDb.setUserTier(email, tier);
-  }
+  if (!email) return res.status(400).json({ error: "Email is required" });
+
   if (resetDownloads) {
     saasDb.resetUserDownloads(email);
   }
-  res.json({ success: true, user: saasDb.getUser(email) });
+
+  const result = saasDb.adminUpdateUser(email, {
+    tier,
+    name,
+    downloadsLimit: downloadsLimit !== undefined && downloadsLimit !== "" ? Number(downloadsLimit) : undefined,
+    downloadsUsed: downloadsUsed !== undefined && downloadsUsed !== "" ? Number(downloadsUsed) : undefined,
+    billingCycle,
+    cycleResetDate,
+    status
+  });
+
+  if (!result.success) {
+    return res.status(400).json({ error: result.error || "Failed to update user" });
+  }
+
+  res.json({ success: true, user: result.user });
+});
+
+app.post("/api/saas/admin/create-user", (req, res) => {
+  const {
+    email,
+    name,
+    tier,
+    downloadsLimit,
+    downloadsUsed,
+    billingCycle,
+    status,
+    adminEmail
+  } = req.body;
+  const verifiedAdmin = (adminEmail || (req.headers["x-user-email"] as string) || "").trim().toLowerCase();
+
+  if (verifiedAdmin && !ADMIN_EMAILS.includes(verifiedAdmin)) {
+    return res.status(403).json({ error: "Access denied. Only authorized Google admin accounts can create user accounts." });
+  }
+
+  if (!email) return res.status(400).json({ error: "Email is required" });
+
+  const result = saasDb.adminCreateUser({
+    email,
+    name,
+    tier,
+    downloadsLimit: downloadsLimit !== undefined && downloadsLimit !== "" ? Number(downloadsLimit) : undefined,
+    downloadsUsed: downloadsUsed !== undefined && downloadsUsed !== "" ? Number(downloadsUsed) : 0,
+    billingCycle,
+    status
+  });
+
+  if (!result.success) {
+    return res.status(400).json({ error: result.error || "Failed to create user" });
+  }
+
+  res.json({ success: true, user: result.user });
+});
+
+app.post("/api/saas/admin/delete-user", (req, res) => {
+  const { email, adminEmail } = req.body;
+  const verifiedAdmin = (adminEmail || (req.headers["x-user-email"] as string) || "").trim().toLowerCase();
+
+  if (verifiedAdmin && !ADMIN_EMAILS.includes(verifiedAdmin)) {
+    return res.status(403).json({ error: "Access denied. Only authorized Google admin accounts can delete users." });
+  }
+
+  if (!email) return res.status(400).json({ error: "Email is required" });
+
+  const result = saasDb.adminDeleteUser(email);
+  if (!result.success) {
+    return res.status(400).json({ error: result.error || "Failed to delete user" });
+  }
+
+  res.json({ success: true, deletedEmail: email });
 });
 
 // Creator Tool Ads Endpoints ($150 per 30-day cycle)

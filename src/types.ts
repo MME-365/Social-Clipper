@@ -191,6 +191,7 @@ export interface SaaSUser {
   totalVideosProcessed: number;
   avatarUrl?: string;
   authProvider?: "google" | "local";
+  status?: "active" | "suspended";
 }
 
 export interface SaaSTransaction {

@@ -107,6 +107,7 @@ export interface SaaSUser {
   passwordSalt?: string;
   avatarUrl?: string;
   authProvider?: "google" | "local";
+  status?: "active" | "suspended";
 }
 
 export interface CreatorToolAd {
@@ -635,9 +636,129 @@ export const saasDb = {
     if (user) {
       user.downloadsUsed = 0;
       saveStore(store);
-      return user;
+      return sanitizeUser(user);
     }
     return this.getUser(email);
+  },
+
+  adminCreateUser(payload: {
+    email: string;
+    name?: string;
+    tier?: "free" | "creator" | "enterprise" | "pack";
+    downloadsLimit?: number;
+    downloadsUsed?: number;
+    billingCycle?: "monthly" | "annual";
+    status?: "active" | "suspended";
+  }): { success: boolean; user?: SaaSUser; error?: string } {
+    const store = loadStore();
+    const cleanEmail = (payload.email || "").trim().toLowerCase();
+    if (!cleanEmail || !cleanEmail.includes("@")) {
+      return { success: false, error: "A valid email address is required." };
+    }
+
+    const existing = store.users.find((u) => u.email.toLowerCase() === cleanEmail);
+    if (existing) {
+      return { success: false, error: `An account for ${cleanEmail} already exists.` };
+    }
+
+    const tier = payload.tier || "free";
+    const plan = store.plans[tier as "free" | "creator" | "enterprise"] || store.plans.free;
+    const defaultLimit = plan ? plan.downloadLimit : 3;
+    const limit = typeof payload.downloadsLimit === "number" && !isNaN(payload.downloadsLimit) ? payload.downloadsLimit : defaultLimit;
+    const used = typeof payload.downloadsUsed === "number" && !isNaN(payload.downloadsUsed) ? payload.downloadsUsed : 0;
+    const cycle = payload.billingCycle || "monthly";
+    const cycleDays = cycle === "annual" ? 365 : (plan?.interval === "week" ? 7 : 30);
+
+    const newUser: SaaSUser = {
+      id: `usr_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      email: cleanEmail,
+      name: payload.name?.trim() || cleanEmail.split("@")[0],
+      tier,
+      billingCycle: cycle,
+      downloadsUsed: used,
+      downloadsLimit: limit,
+      cycleResetDate: new Date(Date.now() + cycleDays * 24 * 60 * 60 * 1000).toISOString(),
+      joinedDate: new Date().toISOString(),
+      totalVideosProcessed: used,
+      status: payload.status || "active",
+      authProvider: "local"
+    };
+
+    store.users.unshift(newUser);
+    saveStore(store);
+    return { success: true, user: sanitizeUser(newUser) };
+  },
+
+  adminUpdateUser(
+    email: string,
+    updates: {
+      name?: string;
+      tier?: "free" | "creator" | "enterprise" | "pack";
+      billingCycle?: "monthly" | "annual";
+      downloadsLimit?: number;
+      downloadsUsed?: number;
+      cycleResetDate?: string;
+      status?: "active" | "suspended";
+    }
+  ): { success: boolean; user?: SaaSUser; error?: string } {
+    const store = loadStore();
+    const cleanEmail = email.trim().toLowerCase();
+    let user = store.users.find((u) => u.email.toLowerCase() === cleanEmail);
+    if (!user) {
+      user = this.getUser(cleanEmail);
+    }
+
+    if (updates.name !== undefined && updates.name.trim()) {
+      user.name = updates.name.trim();
+    }
+
+    if (updates.tier !== undefined) {
+      const prevTier = user.tier;
+      user.tier = updates.tier;
+      if (updates.downloadsLimit === undefined && updates.tier !== prevTier) {
+        const plan = store.plans[updates.tier as "free" | "creator" | "enterprise"];
+        if (plan) {
+          user.downloadsLimit = plan.downloadLimit;
+        }
+      }
+    }
+
+    if (updates.billingCycle !== undefined) {
+      user.billingCycle = updates.billingCycle;
+    }
+
+    if (typeof updates.downloadsLimit === "number" && !isNaN(updates.downloadsLimit)) {
+      user.downloadsLimit = Math.max(0, updates.downloadsLimit);
+    }
+
+    if (typeof updates.downloadsUsed === "number" && !isNaN(updates.downloadsUsed)) {
+      user.downloadsUsed = Math.max(0, updates.downloadsUsed);
+    }
+
+    if (updates.cycleResetDate !== undefined && updates.cycleResetDate) {
+      user.cycleResetDate = updates.cycleResetDate;
+    }
+
+    if (updates.status !== undefined) {
+      user.status = updates.status;
+    }
+
+    saveStore(store);
+    return { success: true, user: sanitizeUser(user) };
+  },
+
+  adminDeleteUser(email: string): { success: boolean; error?: string } {
+    const store = loadStore();
+    const cleanEmail = email.trim().toLowerCase();
+    const initialCount = store.users.length;
+    store.users = store.users.filter((u) => u.email.toLowerCase() !== cleanEmail);
+
+    if (store.users.length === initialCount) {
+      return { success: false, error: `User with email ${cleanEmail} not found.` };
+    }
+
+    saveStore(store);
+    return { success: true };
   },
 
   trackDownload(
@@ -651,14 +772,23 @@ export const saasDb = {
       user = this.getUser(email);
     }
 
-    const plan = store.plans[user.tier];
+    if (user.status === "suspended") {
+      return {
+        allowed: false,
+        remaining: 0,
+        user: sanitizeUser(user),
+        error: "Your account has been suspended by administration. Please contact support."
+      };
+    }
+
+    const plan = store.plans[user.tier as "free" | "creator" | "enterprise"] || store.plans.free;
 
     // Check 1: Free tier cannot batch download 5 clips at once
     if (user.tier === "free" && isBatch) {
       return {
         allowed: false,
         remaining: Math.max(0, user.downloadsLimit - user.downloadsUsed),
-        user,
+        user: sanitizeUser(user),
         error: "Batch downloading (all 5 clips at once) is a premium feature. Please upgrade to the Creator Tier ($9/mo) or Enterprise Tier to unlock."
       };
     }
@@ -669,7 +799,7 @@ export const saasDb = {
       return {
         allowed: false,
         remaining: 0,
-        user,
+        user: sanitizeUser(user),
         error: `You have reached ${resetMsg} (${user.downloadsLimit} downloads). Please upgrade your package or wait until your cycle resets on ${new Date(user.cycleResetDate).toLocaleDateString()}.`
       };
     }
@@ -682,7 +812,7 @@ export const saasDb = {
     return {
       allowed: true,
       remaining: Math.max(0, user.downloadsLimit - user.downloadsUsed),
-      user
+      user: sanitizeUser(user)
     };
   },
 
@@ -869,7 +999,7 @@ export const saasDb = {
       oneTimePacks: store.oneTimePacks && store.oneTimePacks.length > 0 ? store.oneTimePacks : ONE_TIME_PACKS,
       creatorAds: store.creatorAds && store.creatorAds.length > 0 ? store.creatorAds : DEFAULT_CREATOR_TOOL_ADS,
       paypalSettings: store.paypalSettings,
-      users: store.users,
+      users: store.users.map(sanitizeUser),
       transactions: store.transactions
     };
   }

@@ -1248,20 +1248,79 @@ export default function App() {
   // Admin User updates
   const handleAdminUpdateUser = async (
     email: string,
-    tier?: "free" | "creator" | "enterprise",
+    updatesOrTier?: any,
     resetDownloads?: boolean
   ) => {
+    let payload: any = { email, adminEmail: currentUser.email };
+    if (typeof updatesOrTier === "string") {
+      payload.tier = updatesOrTier;
+      payload.resetDownloads = resetDownloads;
+    } else if (typeof updatesOrTier === "object" && updatesOrTier !== null) {
+      payload = { ...payload, ...updatesOrTier };
+      if (resetDownloads) payload.resetDownloads = true;
+    } else if (resetDownloads) {
+      payload.resetDownloads = true;
+    }
+
     const res = await fetch("/api/saas/admin/update-user", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, tier, resetDownloads })
+      headers: {
+        "Content-Type": "application/json",
+        "x-user-email": currentUser.email
+      },
+      body: JSON.stringify(payload)
     });
     if (res.ok) {
       const data = await res.json();
-      if (data.user && data.user.email === currentUser.email) {
+      if (data.user && data.user.email.toLowerCase() === currentUser.email.toLowerCase()) {
         setCurrentUser(data.user);
       }
-      fetchSaasData();
+      await fetchSaasData();
+    } else {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || "Failed to update user");
+    }
+  };
+
+  const handleAdminCreateUser = async (payload: {
+    email: string;
+    name?: string;
+    tier?: "free" | "creator" | "enterprise" | "pack";
+    downloadsLimit?: number;
+    downloadsUsed?: number;
+    billingCycle?: "monthly" | "annual";
+    status?: "active" | "suspended";
+  }) => {
+    const res = await fetch("/api/saas/admin/create-user", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-user-email": currentUser.email
+      },
+      body: JSON.stringify({ ...payload, adminEmail: currentUser.email })
+    });
+    if (res.ok) {
+      await fetchSaasData();
+    } else {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || "Failed to create user");
+    }
+  };
+
+  const handleAdminDeleteUser = async (email: string) => {
+    const res = await fetch("/api/saas/admin/delete-user", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-user-email": currentUser.email
+      },
+      body: JSON.stringify({ email, adminEmail: currentUser.email })
+    });
+    if (res.ok) {
+      await fetchSaasData();
+    } else {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || "Failed to delete user");
     }
   };
 
@@ -1440,6 +1499,8 @@ export default function App() {
                 overview={{ ...adminOverview, oneTimePacks, creatorAds }}
                 onUpdateConfig={handleAdminUpdateConfig}
                 onUpdateUser={handleAdminUpdateUser}
+                onCreateUser={handleAdminCreateUser}
+                onDeleteUser={handleAdminDeleteUser}
                 onRefreshAds={fetchSaasData}
               />
             ) : (
