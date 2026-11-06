@@ -196,9 +196,9 @@ export interface SaaSUser {
 export interface SaaSTransaction {
   id: string;
   userEmail: string;
-  plan: "creator" | "enterprise" | "pack_5" | "pack_25" | "pack_50";
+  plan: "creator" | "enterprise" | "pack_5" | "pack_25" | "pack_50" | "creator_ad_150" | string;
   amount: number;
-  status: "completed" | "refunded";
+  status: "completed" | "refunded" | "pending" | "failed";
   date: string;
   paypalTransactionId: string;
 }

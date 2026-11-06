@@ -1,6 +1,6 @@
-import { useState, FormEvent } from "react";
-import { User, Shield, Zap, Clock, Check, AlertCircle, ArrowUpRight, RefreshCw, Film, ExternalLink, LogIn, TrendingUp, LogOut, Sparkles, PlusCircle, Globe } from "lucide-react";
-import { SaaSUser, PlanConfig, PayPalSettings, OneTimePack, DEFAULT_ONE_TIME_PACKS, CreatorToolAd } from "../types";
+import { useState, useEffect, FormEvent } from "react";
+import { User, Shield, Zap, Clock, Check, AlertCircle, ArrowUpRight, RefreshCw, Film, ExternalLink, LogIn, TrendingUp, LogOut, Sparkles, PlusCircle, Globe, Receipt, CreditCard } from "lucide-react";
+import { SaaSUser, PlanConfig, PayPalSettings, OneTimePack, DEFAULT_ONE_TIME_PACKS, CreatorToolAd, SaaSTransaction } from "../types";
 import { MarketComparison } from "./MarketComparison";
 
 interface UserDashboardProps {
@@ -41,6 +41,23 @@ export function UserDashboard({
   const [emailInput, setEmailInput] = useState(user.email);
   const [isSwitching, setIsSwitching] = useState(false);
   const [showMarketComparison, setShowMarketComparison] = useState(false);
+  const [userTransactions, setUserTransactions] = useState<SaaSTransaction[]>([]);
+  const [isLoadingTx, setIsLoadingTx] = useState(false);
+
+  useEffect(() => {
+    if (user.email) {
+      setIsLoadingTx(true);
+      fetch(`/api/saas/user-transactions?email=${encodeURIComponent(user.email)}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data && Array.isArray(data.transactions)) {
+            setUserTransactions(data.transactions);
+          }
+        })
+        .catch(() => {})
+        .finally(() => setIsLoadingTx(false));
+    }
+  }, [user.email, user.tier, user.downloadsLimit]);
 
   const isPackTier = user.tier === "pack";
   const currentPlan = (plans[user.tier as "free" | "creator" | "enterprise"]) || plans.creator;
@@ -449,6 +466,78 @@ export function UserDashboard({
             </div>
           );
         })()}
+      </div>
+
+      {/* Payment Receipts & Order History Card */}
+      <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <h3 className="font-display font-bold text-sm text-slate-900 flex items-center gap-2">
+              <Receipt className="h-4 w-4 text-violet-600" />
+              <span>Payment Receipts & Order History</span>
+            </h3>
+            <p className="text-xs text-slate-500">
+              Verified record of your account upgrades, PayPal transactions, and lifetime credit orders.
+            </p>
+          </div>
+          <span className="text-xs font-semibold text-slate-500 font-mono">
+            {userTransactions.length} {userTransactions.length === 1 ? "Recorded Order" : "Recorded Orders"}
+          </span>
+        </div>
+
+        {userTransactions.length > 0 ? (
+          <div className="overflow-x-auto rounded-xl border border-slate-200/80">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
+                <tr>
+                  <th className="py-2.5 px-3">Date</th>
+                  <th className="py-2.5 px-3">Package / Service</th>
+                  <th className="py-2.5 px-3">Amount</th>
+                  <th className="py-2.5 px-3">Status</th>
+                  <th className="py-2.5 px-3">PayPal Reference</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {userTransactions.map((tx) => {
+                  let planLabel = tx.plan;
+                  if (tx.plan === "creator") planLabel = "Creator Tier ($9/mo)";
+                  else if (tx.plan === "enterprise") planLabel = "Enterprise Tier ($99/mo)";
+                  else if (tx.plan === "pack_5") planLabel = "12 Video Pack ($5)";
+                  else if (tx.plan === "pack_25") planLabel = "65 Video Pack ($25)";
+                  else if (tx.plan === "pack_50") planLabel = "135 Video Pack ($50)";
+                  else if (tx.plan === "creator_ad_150") planLabel = "Creator Ad Spotlight ($150)";
+
+                  return (
+                    <tr key={tx.id} className="hover:bg-slate-50/50">
+                      <td className="py-3 px-3 text-slate-500 font-mono text-[11px]">
+                        {new Date(tx.date).toLocaleDateString()}
+                      </td>
+                      <td className="py-3 px-3 font-semibold text-slate-900">
+                        {planLabel}
+                      </td>
+                      <td className="py-3 px-3 font-bold text-slate-900 font-mono">
+                        ${tx.amount} USD
+                      </td>
+                      <td className="py-3 px-3">
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full uppercase">
+                          <Check className="h-3 w-3" />
+                          {tx.status}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 text-slate-400 font-mono text-[10px]">
+                        {tx.paypalTransactionId}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="p-4 rounded-xl bg-slate-50 border border-dashed border-slate-200 text-center text-xs text-slate-500">
+            No paid transactions recorded for this email yet. Upgrades and PayPal orders will appear here automatically.
+          </div>
+        )}
       </div>
 
       {/* Collapsible Market Intelligence / Comparison Section */}

@@ -825,6 +825,54 @@ app.post("/api/saas/buy-pack", (req, res) => {
   }
 });
 
+app.get("/api/saas/user-transactions", (req, res) => {
+  const email = ((req.query.email || req.headers["x-user-email"]) as string || "").trim().toLowerCase();
+  if (!email) return res.json({ transactions: [] });
+  res.json({ transactions: saasDb.getUserTransactions(email) });
+});
+
+// Automated PayPal Webhook & IPN Handler
+app.post("/api/saas/paypal-webhook", (req, res) => {
+  try {
+    const event = req.body;
+    console.log("Received PayPal Webhook:", event.event_type || event.txn_type || "Generic IPN");
+
+    // Extract customer email
+    const payerEmail = (
+      event.resource?.payer?.email_address ||
+      event.payer_email ||
+      event.resource?.custom_id ||
+      event.custom ||
+      ""
+    ).trim().toLowerCase();
+
+    const orderId = event.resource?.id || event.txn_id || `PAYPAL_${Date.now()}`;
+    const amount = parseFloat(event.resource?.amount?.value || event.mc_gross || "0");
+    const desc = (event.resource?.description || event.item_name || "").toLowerCase();
+
+    if (payerEmail) {
+      if (desc.includes("enterprise") || amount >= 90) {
+        saasDb.recordTransaction(payerEmail, "enterprise", orderId, amount >= 500 ? "annual" : "monthly");
+      } else if (desc.includes("pack_50") || amount === 50) {
+        saasDb.buyOneTimePack(payerEmail, "pack_50", orderId);
+      } else if (desc.includes("pack_25") || amount === 25) {
+        saasDb.buyOneTimePack(payerEmail, "pack_25", orderId);
+      } else if (desc.includes("pack_5") || amount === 5) {
+        saasDb.buyOneTimePack(payerEmail, "pack_5", orderId);
+      } else if (amount === 150 || desc.includes("ad")) {
+        console.log(`Creator tool ad recorded for ${payerEmail}`);
+      } else {
+        saasDb.recordTransaction(payerEmail, "creator", orderId, amount >= 80 ? "annual" : "monthly");
+      }
+    }
+
+    res.status(200).json({ status: "success", received: true });
+  } catch (err: any) {
+    console.error("PayPal webhook processing error:", err);
+    res.status(200).json({ status: "error", message: err.message });
+  }
+});
+
 const ADMIN_EMAILS = [
   "customerservice.mme365@gmail.com",
   "marketingmanagementenp.365@gmail.com"

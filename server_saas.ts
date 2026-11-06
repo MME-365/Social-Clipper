@@ -603,6 +603,12 @@ export const saasDb = {
     return sanitizeUser(user);
   },
 
+  getUserTransactions(email: string): SaaSTransaction[] {
+    const store = loadStore();
+    const cleanEmail = email.trim().toLowerCase();
+    return store.transactions.filter((t) => t.userEmail.toLowerCase() === cleanEmail);
+  },
+
   setUserTier(email: string, tier: "free" | "creator" | "enterprise"): SaaSUser {
     const store = loadStore();
     const cleanEmail = email.trim().toLowerCase();
@@ -708,13 +714,27 @@ export const saasDb = {
 
     store.transactions.unshift(tx);
     // Also upgrade user in store
-    const user = store.users.find((u) => u.email.toLowerCase() === userEmail.trim().toLowerCase());
-    if (user) {
+    let user = store.users.find((u) => u.email.toLowerCase() === userEmail.trim().toLowerCase());
+    const cycleDays = billingCycle === "annual" ? 365 : planConfig.interval === "week" ? 7 : 30;
+    if (!user) {
+      user = {
+        id: `usr_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        email: userEmail.trim().toLowerCase(),
+        name: userEmail.trim().split("@")[0],
+        tier: plan,
+        billingCycle,
+        downloadsUsed: 0,
+        downloadsLimit: planConfig.downloadLimit,
+        cycleResetDate: new Date(Date.now() + cycleDays * 24 * 60 * 60 * 1000).toISOString(),
+        joinedDate: new Date().toISOString(),
+        totalVideosProcessed: 0
+      };
+      store.users.push(user);
+    } else {
       user.tier = plan;
       user.billingCycle = billingCycle;
       user.downloadsLimit = planConfig.downloadLimit;
       user.downloadsUsed = 0;
-      const cycleDays = billingCycle === "annual" ? 365 : planConfig.interval === "week" ? 7 : 30;
       user.cycleResetDate = new Date(Date.now() + cycleDays * 24 * 60 * 60 * 1000).toISOString();
     }
     saveStore(store);
