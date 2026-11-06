@@ -3,6 +3,7 @@ import { Check, Zap, Sparkles, ArrowRight, Shield, Film, Smartphone, Layers, Clo
 import { PlanConfig, PayPalSettings, SaaSUser, OneTimePack, DEFAULT_ONE_TIME_PACKS, CreatorToolAd } from "../types";
 import { MarketComparison } from "./MarketComparison";
 import { CreatorToolsCarousel } from "./CreatorToolsCarousel";
+import { WorkflowComparison } from "./WorkflowComparison";
 
 interface LandingPageProps {
   plans: {
@@ -145,6 +146,17 @@ export function LandingPage({
             Direct auto-copy captions and 1-click publishing links for TikTok, Instagram Reels, and YouTube Shorts without phone air-drop hassle.
           </p>
         </div>
+      </section>
+
+      {/* THE 6-STEP CREATOR NIGHTMARE VS SOCIALCLIPPER */}
+      <section id="workflow" className="max-w-5xl mx-auto px-4 scroll-mt-20">
+        <WorkflowComparison
+          onOpenStudio={onOpenDashboard}
+          onOpenPricing={() => {
+            const el = document.getElementById("pricing");
+            if (el) el.scrollIntoView({ behavior: "smooth" });
+          }}
+        />
       </section>
 
       {/* FEATURED CREATOR TOOLS CAROUSEL (ABOVE MARKET INTELLIGENCE) */}
@@ -607,6 +619,16 @@ export function LandingPage({
         </h3>
 
         <div className="space-y-3 text-xs">
+          <div className="bg-violet-50/70 border border-violet-200/80 rounded-xl p-4 space-y-1">
+            <h4 className="font-bold text-violet-950 flex items-center gap-1.5">
+              <Zap className="h-4 w-4 text-violet-600" />
+              <span>Why is SocialClipper faster than the traditional Adobe / CloudConvert workflow?</span>
+            </h4>
+            <p className="text-violet-900 leading-relaxed">
+              Traditional clipping forces creators through a 6-step gauntlet: finding ad-heavy downloader sites, upscaling with CloudConvert, launching Adobe Premiere Pro ($35+/mo) to manually keyframe crops scene-by-scene, typing lyrics, and emailing files to your phone. SocialClipper eliminates all 5 apps: paste 1 link, get 5 auto-framed vertical clips with burned-in karaoke captions, and scan a QR code to download straight to your mobile camera roll in 90 seconds.
+            </p>
+          </div>
+
           <div className="bg-white border border-slate-200/80 rounded-xl p-4 space-y-1">
             <h4 className="font-bold text-slate-800">How does the Free Tier download limit work?</h4>
             <p className="text-slate-600 leading-relaxed">
