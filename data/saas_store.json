@@ -232,6 +232,38 @@
   ],
   "creatorAds": [
     {
+      "id": "ad_batch_1794439707989_is0ov",
+      "name": "BandLab Cloud",
+      "tagline": "Cloud DAW & Mobile Studio",
+      "description": "Curated creator tool partner.",
+      "url": "https://bandlab.com",
+      "logoUrl": "/assets/aistudio/1991_1910e85f.jpg",
+      "category": "Music Tech & Production",
+      "price": 0,
+      "cycleDays": 365,
+      "badge": "Verified Partner",
+      "advertiserEmail": "partnerships@socialclipper.io",
+      "createdAt": "2026-11-11T23:28:27.989Z",
+      "expiresAt": "2027-11-11T23:28:27.989Z",
+      "status": "active"
+    },
+    {
+      "id": "ad_admin_1794439666766_3qe9m",
+      "name": "Splice Studio Pro",
+      "tagline": "Royalty-Free AI Stems & One-Shots",
+      "description": "Official featured partner tool.",
+      "url": "https://splice.com",
+      "logoUrl": "/assets/aistudio/1991_1910e85f.jpg",
+      "category": "Music Tech & Production",
+      "price": 0,
+      "cycleDays": 365,
+      "badge": "Featured Partner",
+      "advertiserEmail": "admin@socialclipper.io",
+      "createdAt": "2026-11-11T23:27:46.766Z",
+      "expiresAt": "2027-11-11T23:27:46.766Z",
+      "status": "active"
+    },
+    {
       "id": "ad_lwe_sentry",
       "name": "LWE-Sentry",
       "tagline": "Autonomous Agent & Workflow Observability",

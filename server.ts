@@ -208,19 +208,37 @@ async function runBackgroundDownload(videoId: string) {
   state.progress = 15;
   state.message = "Connecting to YouTube high-definition stream...";
 
-  // 1. Primary engine: yt-dlp with node JS challenge solver
+  // 1. Primary engine: yt-dlp standalone binary with node JS runtime
   try {
+    const localYtDlp = path.join(process.cwd(), "bin", "yt-dlp");
+    if (!fs.existsSync(localYtDlp) && !fs.existsSync("/usr/local/bin/yt-dlp")) {
+      try {
+        await execPromise(`mkdir -p "${path.join(process.cwd(), "bin")}" && curl -sL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux -o "${localYtDlp}" && chmod +x "${localYtDlp}"`);
+      } catch (dlBinErr) {
+        console.warn("Could not auto-fetch yt-dlp binary:", dlBinErr);
+      }
+    }
+
     await new Promise<void>((resolve, reject) => {
+      const ytDlpBin = fs.existsSync(localYtDlp)
+        ? localYtDlp
+        : (fs.existsSync("/usr/local/bin/yt-dlp") ? "/usr/local/bin/yt-dlp" : "yt-dlp");
+
+      const cookiesPath = path.join(process.cwd(), "data", "cookies.txt");
       const args = [
         "--js-runtimes", "node",
         "--no-playlist",
         "-f", "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
-        "--merge-output-format", "mp4",
-        "-o", finalPath,
-        videoUrl
+        "--merge-output-format", "mp4"
       ];
 
-      const proc = spawn("yt-dlp", args);
+      if (fs.existsSync(cookiesPath) && fs.statSync(cookiesPath).size > 10) {
+        args.push("--cookies", cookiesPath);
+      }
+
+      args.push("-o", finalPath, videoUrl);
+
+      const proc = spawn(ytDlpBin, args);
 
       proc.stdout.on("data", (data) => {
         const text = data.toString();
@@ -602,22 +620,19 @@ Return the result strictly in JSON matching the specified schema format.`;
 // Endpoint to upload user video for high-speed FFmpeg 9:16 processing
 app.post("/api/upload-video", express.raw({ type: "*/*", limit: "500mb" }), (req, res) => {
   try {
-    const videoId = req.query.videoId as string | undefined;
-    const userVideoPath = path.join(DOWNLOADS_DIR, "user_video.mp4");
-    fs.writeFileSync(userVideoPath, req.body);
+    const rawVideoId = (req.query.videoId as string | undefined) || `upload_${Date.now()}`;
+    const safeVideoId = path.basename(rawVideoId).replace(/[^a-zA-Z0-9_-]/g, "_");
+    const targetPath = path.join(DOWNLOADS_DIR, `${safeVideoId}.mp4`);
+    fs.writeFileSync(targetPath, req.body);
 
-    if (videoId && typeof videoId === "string" && videoId.length === 11) {
-      const ytVideoPath = path.join(DOWNLOADS_DIR, `${videoId}.mp4`);
-      fs.writeFileSync(ytVideoPath, req.body);
-      downloadsStatus.set(videoId, {
-        status: "completed",
-        progress: 100,
-        message: "Source video uploaded directly!",
-        url: `/downloads/${videoId}.mp4`
-      });
-    }
+    downloadsStatus.set(safeVideoId, {
+      status: "completed",
+      progress: 100,
+      message: "Source video uploaded directly!",
+      url: `/downloads/${safeVideoId}.mp4`
+    });
 
-    res.json({ success: true, url: "/downloads/user_video.mp4", videoId });
+    res.json({ success: true, url: `/downloads/${safeVideoId}.mp4`, videoId: safeVideoId });
   } catch (err: any) {
     console.error("Video upload error:", err);
     res.status(500).json({ error: "Failed to save video on server" });
@@ -653,19 +668,17 @@ app.post("/api/render-clip-ffmpeg", async (req, res) => {
       karaokeText
     } = req.body;
     
-    // Resolve source video:
-    // If user explicitly loaded sample video, use sample_music_video.mp4.
-    // If user provided a YouTube videoId, ONLY use that video or user uploaded video. NEVER silently fall back to sample video!
-    const isSampleMode = videoId === "sample" || (!videoId && !fs.existsSync(path.join(DOWNLOADS_DIR, "user_video.mp4")));
-    const ytVideo = videoId && videoId !== "sample" ? path.join(DOWNLOADS_DIR, `${videoId}.mp4`) : null;
-    const userVideo = path.join(DOWNLOADS_DIR, "user_video.mp4");
+    // Resolve source video strictly by videoId:
+    // Only use sample video if client explicitly requested videoId === "sample".
+    // Never fall back to sample_music_video.mp4 or a shared user_video.mp4 when rendering a YouTube URL or uploaded file!
+    const isSampleMode = videoId === "sample";
+    const safeVideoId = videoId && videoId !== "sample" ? path.basename(String(videoId)).replace(/[^a-zA-Z0-9_-]/g, "_") : null;
+    const requestedVideoPath = safeVideoId ? path.join(DOWNLOADS_DIR, `${safeVideoId}.mp4`) : null;
     const sampleVideo = path.join(DOWNLOADS_DIR, "sample_music_video.mp4");
     
     let sourceVideo: string | null = null;
-    if (ytVideo && fs.existsSync(ytVideo) && fs.statSync(ytVideo).size > 102400) {
-      sourceVideo = ytVideo;
-    } else if (fs.existsSync(userVideo) && fs.statSync(userVideo).size > 102400) {
-      sourceVideo = userVideo;
+    if (requestedVideoPath && fs.existsSync(requestedVideoPath) && fs.statSync(requestedVideoPath).size > 102400) {
+      sourceVideo = requestedVideoPath;
     } else if (isSampleMode && fs.existsSync(sampleVideo)) {
       sourceVideo = sampleVideo;
     }
@@ -1013,6 +1026,76 @@ app.post("/api/saas/creator-ads", (req, res) => {
 app.delete("/api/saas/creator-ads/:id", (req, res) => {
   const result = saasDb.deleteCreatorAd(req.params.id);
   res.json(result);
+});
+
+// Update an existing partner tool / ad on the fly
+app.put("/api/saas/creator-ads/:id", (req, res) => {
+  try {
+    const result = saasDb.updateCreatorAd(req.params.id, req.body);
+    if (!result.success) {
+      return res.status(404).json({ error: result.error || "Partner tool not found" });
+    }
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to update creator tool ad" });
+  }
+});
+
+// Admin insert partner tool without payment (Free Admin Insertion)
+app.post("/api/saas/admin/creator-ads", (req, res) => {
+  try {
+    const { name, tagline, description, url, logoUrl, category, badge, advertiserEmail, cycleDays, status } = req.body;
+    if (!name || !url) {
+      return res.status(400).json({ error: "Tool name and target URL are required." });
+    }
+    const result = saasDb.adminAddCreatorAd({
+      name,
+      tagline: tagline || "Creator Software & Production Tool",
+      description,
+      url,
+      logoUrl: logoUrl || "/assets/aistudio/1991_1910e85f.jpg",
+      category,
+      badge,
+      advertiserEmail,
+      cycleDays: cycleDays ? Number(cycleDays) : 365,
+      status
+    });
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to add creator tool ad" });
+  }
+});
+
+// Admin batch insert brands (e.g. 10 brands at once without paying)
+app.post("/api/saas/admin/batch-creator-ads", (req, res) => {
+  try {
+    const { brands } = req.body;
+    if (!Array.isArray(brands) || brands.length === 0) {
+      return res.status(400).json({ error: "An array of brand objects is required." });
+    }
+    const result = saasDb.batchAddCreatorAds(brands);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to batch insert creator tool ads" });
+  }
+});
+
+// YouTube cookies management for bot bypass
+app.post("/api/saas/admin/youtube-cookies", (req, res) => {
+  try {
+    const { cookiesText } = req.body;
+    const cookiesPath = path.join(process.cwd(), "data", "cookies.txt");
+    fs.writeFileSync(cookiesPath, cookiesText || "", "utf8");
+    res.json({ success: true, message: "YouTube cookies saved successfully!" });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to save cookies" });
+  }
+});
+
+app.get("/api/saas/admin/youtube-cookies", (req, res) => {
+  const cookiesPath = path.join(process.cwd(), "data", "cookies.txt");
+  const hasCookies = fs.existsSync(cookiesPath) && fs.statSync(cookiesPath).size > 10;
+  res.json({ hasCookies });
 });
 
 // Upload custom logo image for Creator Tool Ad

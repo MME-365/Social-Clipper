@@ -161,6 +161,7 @@ export default function App() {
 
   const [youtubeUrl, setYoutubeUrl] = useState<string>("https://www.youtube.com/watch?v=fLexgOxsZu0");
   const [youtubeId, setYoutubeId] = useState<string | null>("fLexgOxsZu0");
+  const [uploadedVideoId, setUploadedVideoId] = useState<string | null>(null);
   const [parsedTitle, setParsedTitle] = useState<string>("Bruno Mars - The Lazy Song (Official Music Video)");
   const [isLoadingInfo, setIsLoadingInfo] = useState<boolean>(false);
 
@@ -378,6 +379,7 @@ export default function App() {
 
     setIsLoadingInfo(true);
     setYoutubeId(id);
+    setUploadedVideoId(null);
     setYoutubeUrl(url);
     setSelectedFile(null);
     setVideoSrc(null);
@@ -429,6 +431,7 @@ export default function App() {
   const handleLoadSampleVideo = () => {
     setSelectedFile(null);
     setYoutubeId(null);
+    setUploadedVideoId(null);
     setVideoSrc("/downloads/sample_music_video.mp4");
     setParsedTitle("4K Synthwave Master (Local MP4)");
     setDuration(30);
@@ -539,8 +542,10 @@ export default function App() {
   };
 
   const handleUploadFile = async (file: File) => {
+    const newUploadId = `upload_${Date.now()}`;
     setSelectedFile(file);
     setYoutubeId(null);
+    setUploadedVideoId(newUploadId);
     const objectUrl = URL.createObjectURL(file);
     setVideoSrc(objectUrl);
     setParsedTitle(file.name.replace(/\.[^/.]+$/, ""));
@@ -567,7 +572,7 @@ export default function App() {
     });
 
     try {
-      fetch("/api/upload-video", {
+      fetch(`/api/upload-video?videoId=${encodeURIComponent(newUploadId)}`, {
         method: "POST",
         headers: { "Content-Type": file.type || "video/mp4" },
         body: file
@@ -579,7 +584,11 @@ export default function App() {
     setIsUploadingSourceVideo(true);
     setSourceUploadProgress(10);
 
-    const queryParam = youtubeId ? `?videoId=${encodeURIComponent(youtubeId)}` : "";
+    const effectiveVideoId = youtubeId || `upload_${Date.now()}`;
+    if (!youtubeId) {
+      setUploadedVideoId(effectiveVideoId);
+    }
+    const queryParam = `?videoId=${encodeURIComponent(effectiveVideoId)}`;
 
     try {
       await new Promise<void>((resolve, reject) => {
@@ -624,13 +633,13 @@ export default function App() {
 
       setTimeout(() => {
         if (targetPending === "all") {
-          handleExportAllClips();
+          handleExportAllClips(true, effectiveVideoId);
         } else if (targetPending === "full") {
-          handleExportFullVideo();
+          handleExportFullVideo(true, effectiveVideoId);
         } else if (typeof targetPending === "number") {
-          handleExportClip(targetPending);
+          handleExportClip(targetPending, true, effectiveVideoId);
         }
-      }, 500);
+      }, 300);
 
     } catch (err: any) {
       alert(`Could not upload video: ${err.message || "Upload failed"}`);
@@ -775,9 +784,16 @@ export default function App() {
     panOffset: number,
     filename: string,
     targetClip?: VideoClip,
-    clipMode: number | "all" | "full" = 0
+    clipMode: number | "all" | "full" = 0,
+    videoIdOverride?: string
   ): Promise<{ success: boolean; requiresUpload?: boolean }> => {
     try {
+      const resolvedVideoId =
+        videoIdOverride ||
+        youtubeId ||
+        uploadedVideoId ||
+        (videoSrc === "/downloads/sample_music_video.mp4" ? "sample" : undefined);
+
       const res = await fetch("/api/render-clip-ffmpeg", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -786,7 +802,7 @@ export default function App() {
           endTime, 
           panOffset, 
           filename,
-          videoId: youtubeId || (videoSrc ? undefined : "sample"),
+          videoId: resolvedVideoId,
           logoConfig: targetClip?.logoConfig,
           karaokeText: targetClip?.karaokeConfig?.enabled !== false ? targetClip?.karaokeConfig?.lines[0]?.text : undefined
         })
@@ -809,10 +825,14 @@ export default function App() {
         setTimeout(() => setDownloadSuccessMsg(null), 5000);
         return { success: false };
       } else if (res.status === 404 || data.requiresUpload) {
-        setPendingExportClipIndex(clipMode);
-        setSourceUploadReason(data.message || "YouTube direct cloud stream blocked by bot security. Upload your source video file (MP4/MOV) to render your 9:16 vertical clips — all your 5 clips, pan framing, lyrics, and watermarks are already saved!");
-        setSourceUploadModalOpen(true);
-        return { success: false, requiresUpload: true };
+        // Only trigger source upload prompt if user hasn't already loaded a local video file
+        if (!videoSrc || videoSrc === "/downloads/sample_music_video.mp4") {
+          setPendingExportClipIndex(clipMode);
+          setSourceUploadReason(data.message || "YouTube direct cloud stream blocked by bot security. Upload your source video file (MP4/MOV) to render your 9:16 vertical clips — all your 5 clips, pan framing, lyrics, and watermarks are already saved!");
+          setSourceUploadModalOpen(true);
+          return { success: false, requiresUpload: true };
+        }
+        return { success: false };
       }
     } catch (err) {
       console.warn("FFmpeg endpoint failed, checking client recorder fallback:", err);
@@ -952,13 +972,15 @@ export default function App() {
   };
 
   // 1. DOWNLOAD AN INDIVIDUAL CLIP (1, 2, 3, 4, or 5)
-  const handleExportClip = async (index: number) => {
+  const handleExportClip = async (index: number, skipQuotaCheck = false, videoIdOverride?: string) => {
     const targetClip = clips[index];
     if (!targetClip) return;
 
-    // Check SaaS quota
-    const authorized = await verifyAndTrackDownload(false);
-    if (!authorized) return;
+    // Check SaaS quota (unless resuming immediately after source upload)
+    if (skipQuotaCheck !== true) {
+      const authorized = await verifyAndTrackDownload(false);
+      if (!authorized) return;
+    }
 
     setExportingMode("single");
     setExportProgress(15);
@@ -966,7 +988,7 @@ export default function App() {
     const filename = `clip_${index + 1}_${cleanSegment}_9x16.mp4`;
 
     // If video source is available and animated karaoke is enabled, record via canvas with burned-in animated karaoke subtitles
-    if (videoSrc && targetClip.karaokeConfig?.enabled !== false) {
+    if (!videoIdOverride && videoSrc && targetClip.karaokeConfig?.enabled !== false) {
       await renderRangeViaMediaRecorder(
         targetClip.startTime,
         targetClip.endTime,
@@ -989,7 +1011,8 @@ export default function App() {
       targetClip.panOffset || 0,
       filename,
       targetClip,
-      index
+      index,
+      videoIdOverride
     );
 
     if (ffmpegResult.success) {
@@ -1021,33 +1044,21 @@ export default function App() {
       fetchSaasData();
       return;
     } else {
-      const summaryText = `[SocialClipper 9:16 Clip ${index + 1}]\n` +
-        `Video Title: ${parsedTitle}\n` +
-        `Clip: ${targetClip.segmentType}\n` +
-        `Start: ${targetClip.startTime}s | End: ${targetClip.endTime}s | Pan: ${targetClip.panOffset}%\n\n` +
-        `TikTok Caption:\n${targetClip.captions.tiktok}\n\n` +
-        `Instagram Caption:\n${targetClip.captions.instagram}\n`;
-
-      const blob = new Blob([summaryText], { type: "text/plain;charset=utf-8" });
-      await downloadUrlFile(
-        URL.createObjectURL(blob),
-        `clip_${index + 1}_${cleanSegment}_9x16_bundle.txt`,
-        `Clip #${index + 1} Metadata`,
-        targetClip.captions.tiktok
-      );
-      setDownloadSuccessMsg(`Downloaded Clip #${index + 1} social metadata package!`);
-      setTimeout(() => setDownloadSuccessMsg(null), 4000);
+      setPendingExportClipIndex(index);
+      setSourceUploadReason("YouTube bot protection prevented automated cloud stream extraction on cloud data center IP. Please upload your source video file (MP4/MOV) below to render this 9:16 vertical clip — all 5 clips, pan framing, lyrics, and watermarks are already saved!");
+      setSourceUploadModalOpen(true);
+      setExportingMode("none");
+      return;
     }
-
-    setExportingMode("none");
-    fetchSaasData();
   };
 
   // 2. DOWNLOAD ALL 5 CLIPS AT THE SAME TIME (BATCH)
-  const handleExportAllClips = async () => {
+  const handleExportAllClips = async (skipQuotaCheck = false, videoIdOverride?: string) => {
     // Check SaaS quota & batch permission (Locked on Free tier)
-    const authorized = await verifyAndTrackDownload(true);
-    if (!authorized) return;
+    if (skipQuotaCheck !== true) {
+      const authorized = await verifyAndTrackDownload(true);
+      if (!authorized) return;
+    }
 
     setExportingMode("all");
 
@@ -1063,7 +1074,8 @@ export default function App() {
         c.panOffset || 0,
         filename,
         c,
-        "all"
+        "all",
+        videoIdOverride
       );
 
       if (ffmpegResult.requiresUpload) {
@@ -1081,15 +1093,13 @@ export default function App() {
           (p) => setBatchProgress({ current: i + 1, total: clips.length, progress: p }),
           c
         );
-      } else if (!ffmpegResult.success) {
-        const summaryText = `[SocialClipper Clip ${i + 1}]\n${c.segmentType}\n${c.startTime}s - ${c.endTime}s\nCaption:\n${c.captions.tiktok}`;
-        const blob = new Blob([summaryText], { type: "text/plain;charset=utf-8" });
-        await downloadUrlFile(
-          URL.createObjectURL(blob),
-          `clip_${i + 1}_${cleanSegment}_9x16.txt`,
-          `Clip #${i + 1} Metadata`,
-          c.captions.tiktok
-        );
+      } else if (!ffmpegResult.success && !videoSrc) {
+        setPendingExportClipIndex("all");
+        setSourceUploadReason("YouTube bot protection prevented automated cloud stream extraction on cloud data center IP. Please upload your source video file (MP4/MOV) below to batch render all 5 vertical clips — all framing, lyrics, and watermarks are saved!");
+        setSourceUploadModalOpen(true);
+        setExportingMode("none");
+        setBatchProgress(null);
+        return;
       }
 
       setBatchProgress({ current: i + 1, total: clips.length, progress: 100 });
@@ -1104,9 +1114,11 @@ export default function App() {
   };
 
   // 3. DOWNLOAD THE ENTIRE VIDEO IN 9:16
-  const handleExportFullVideo = async () => {
-    const authorized = await verifyAndTrackDownload(false);
-    if (!authorized) return;
+  const handleExportFullVideo = async (skipQuotaCheck = false, videoIdOverride?: string) => {
+    if (skipQuotaCheck !== true) {
+      const authorized = await verifyAndTrackDownload(false);
+      if (!authorized) return;
+    }
 
     setExportingMode("full");
     setExportProgress(15);
@@ -1119,7 +1131,8 @@ export default function App() {
       activePan,
       filename,
       clips[activeClipIndex],
-      "full"
+      "full",
+      videoIdOverride
     );
 
     if (ffmpegResult.success) {
@@ -1147,16 +1160,11 @@ export default function App() {
       setDownloadSuccessMsg("Successfully downloaded entire video in 9:16!");
       setTimeout(() => setDownloadSuccessMsg(null), 5000);
     } else {
-      const summaryText = `[SocialClipper Full 9:16 Video Config]\nTitle: ${parsedTitle}\nDuration: 0:00 - ${formatTime(duration)}\nPan: ${activePan}%`;
-      const blob = new Blob([summaryText], { type: "text/plain;charset=utf-8" });
-      await downloadUrlFile(
-        URL.createObjectURL(blob),
-        `full_video_9x16_master.txt`,
-        "Full Video 9:16 Master Config",
-        clips[0]?.captions.tiktok
-      );
-      setDownloadSuccessMsg("Exported full video 9:16 configuration package!");
-      setTimeout(() => setDownloadSuccessMsg(null), 4000);
+      setPendingExportClipIndex("full");
+      setSourceUploadReason("YouTube bot protection prevented automated cloud stream extraction on cloud data center IP. Please upload your source video file (MP4/MOV) below to render your full 9:16 vertical video!");
+      setSourceUploadModalOpen(true);
+      setExportingMode("none");
+      return;
     }
 
     setExportingMode("none");
@@ -1939,9 +1947,9 @@ export default function App() {
                   onChangePanOffset={handleChangePanOffset}
                   zoomLevel={zoomLevel}
                   onChangeZoomLevel={setZoomLevel}
-                  onExportClip={handleExportClip}
-                  onExportAllClips={handleExportAllClips}
-                  onExportFullVideo={handleExportFullVideo}
+                  onExportClip={(i) => handleExportClip(i)}
+                  onExportAllClips={() => handleExportAllClips()}
+                  onExportFullVideo={() => handleExportFullVideo()}
                   exportingMode={exportingMode}
                   exportProgress={exportProgress}
                   batchProgress={batchProgress}

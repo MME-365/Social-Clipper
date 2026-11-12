@@ -120,19 +120,30 @@ export function WorkflowComparison({ onOpenStudio, onOpenPricing }: WorkflowComp
       {/* Side-by-Side Comparison Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
         {/* The Old Way (Red/Slate card) */}
-        <div className="bg-slate-50/80 border border-rose-200/80 rounded-2xl p-6 space-y-5 flex flex-col justify-between">
+        <div className="bg-slate-50/80 border border-rose-200/80 rounded-2xl p-6 space-y-5 flex flex-col justify-between overflow-hidden">
           <div>
-            <div className="flex items-center justify-between pb-4 border-b border-slate-200">
-              <div className="flex items-center gap-2.5">
-                <div className="h-8 w-8 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center font-bold">
+            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 pb-4 border-b border-slate-200">
+              <div className="flex items-start gap-2.5 min-w-0">
+                <div className="h-8 w-8 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center font-bold shrink-0 mt-0.5">
                   <XCircle className="h-5 w-5" />
                 </div>
-                <div>
-                  <h3 className="font-display font-bold text-base text-slate-900">The Exhausting Old Flow</h3>
-                  <p className="text-[11px] text-slate-500">5 apps • 45+ minutes per video • constant friction</p>
+                <div className="min-w-0">
+                  <h3 className="font-display font-bold text-base text-slate-900 leading-tight">The Exhausting Old Flow</h3>
+                  {/* Stacked Subtitle Pills (Red-Themed) so it never overflows */}
+                  <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                    <span className="inline-flex items-center text-[10px] sm:text-[11px] font-bold text-rose-700 bg-rose-50 border border-rose-200/90 px-2 py-0.5 rounded-md shrink-0">
+                      5 separate apps
+                    </span>
+                    <span className="inline-flex items-center text-[10px] sm:text-[11px] font-semibold text-rose-700/90 bg-rose-50/70 border border-rose-100 px-2 py-0.5 rounded-md shrink-0">
+                      45+ minutes lost
+                    </span>
+                    <span className="inline-flex items-center text-[10px] sm:text-[11px] font-medium text-slate-600 bg-slate-200/60 px-2 py-0.5 rounded-md shrink-0">
+                      constant friction
+                    </span>
+                  </div>
                 </div>
               </div>
-              <span className="text-xs font-bold text-rose-700 bg-rose-100 px-2.5 py-1 rounded-lg">
+              <span className="self-start sm:self-auto text-xs font-bold text-rose-700 bg-rose-100 px-2.5 py-1 rounded-lg shrink-0">
                 45+ Mins Lost
               </span>
             </div>
@@ -143,14 +154,14 @@ export function WorkflowComparison({ onOpenStudio, onOpenPricing }: WorkflowComp
                   <span className="font-mono text-xs font-bold text-slate-400 mt-0.5 shrink-0">
                     {step.num}
                   </span>
-                  <div className="space-y-1 flex-1">
-                    <div className="flex items-center justify-between gap-2">
+                  <div className="space-y-1 flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
                       <h4 className="text-xs font-bold text-slate-900">{step.title}</h4>
                       <span className="text-[10px] font-medium bg-rose-50 text-rose-700 px-1.5 py-0.5 rounded border border-rose-100 shrink-0">
                         {step.badge}
                       </span>
                     </div>
-                    <p className="text-[11px] text-slate-500 leading-relaxed">
+                    <p className="text-[11px] text-slate-500 leading-relaxed break-words">
                       {step.desc}
                     </p>
                   </div>
@@ -159,7 +170,7 @@ export function WorkflowComparison({ onOpenStudio, onOpenPricing }: WorkflowComp
             </div>
           </div>
 
-          <div className="pt-4 border-t border-slate-200/80 text-xs text-slate-600 flex items-center justify-between">
+          <div className="pt-4 border-t border-slate-200/80 text-xs text-slate-600 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <span className="font-semibold text-rose-950">Result: Heavy editing fatigue, posting once a week</span>
             <span className="text-slate-400 font-mono text-[11px]">Cost: $45-$80/mo</span>
           </div>
@@ -172,17 +183,28 @@ export function WorkflowComparison({ onOpenStudio, onOpenPricing }: WorkflowComp
           </div>
 
           <div>
-            <div className="flex items-center justify-between pb-4 border-b border-violet-100">
-              <div className="flex items-center gap-2.5">
-                <div className="h-8 w-8 rounded-xl bg-violet-600 text-white flex items-center justify-center font-bold">
+            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 pb-4 border-b border-violet-100">
+              <div className="flex items-start gap-2.5 min-w-0">
+                <div className="h-8 w-8 rounded-xl bg-violet-600 text-white flex items-center justify-center font-bold shrink-0 mt-0.5">
                   <CheckCircle2 className="h-5 w-5" />
                 </div>
-                <div>
-                  <h3 className="font-display font-bold text-base text-slate-900">The SocialClipper Flow</h3>
-                  <p className="text-[11px] text-violet-700 font-medium">1 URL • 5 ready-to-post vertical clips • 90 seconds</p>
+                <div className="min-w-0">
+                  <h3 className="font-display font-bold text-base text-slate-900 leading-tight">The SocialClipper Flow</h3>
+                  {/* Stacked Subtitle Pills (Green-Themed) so it never overflows */}
+                  <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                    <span className="inline-flex items-center text-[10px] sm:text-[11px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md shrink-0">
+                      1 YouTube link
+                    </span>
+                    <span className="inline-flex items-center text-[10px] sm:text-[11px] font-semibold text-emerald-700 bg-emerald-50/70 border border-emerald-100 px-2 py-0.5 rounded-md shrink-0">
+                      5 ready 9:16 clips
+                    </span>
+                    <span className="inline-flex items-center text-[10px] sm:text-[11px] font-bold text-emerald-800 bg-emerald-100/70 border border-emerald-200/60 px-2 py-0.5 rounded-md shrink-0">
+                      ⚡ 90 seconds
+                    </span>
+                  </div>
                 </div>
               </div>
-              <span className="text-xs font-bold text-emerald-800 bg-emerald-100 px-2.5 py-1 rounded-lg">
+              <span className="self-start sm:self-auto text-xs font-bold text-emerald-800 bg-emerald-100 px-2.5 py-1 rounded-lg shrink-0">
                 ⚡ 90 Seconds
               </span>
             </div>
@@ -193,14 +215,14 @@ export function WorkflowComparison({ onOpenStudio, onOpenPricing }: WorkflowComp
                   <span className="font-mono text-xs font-bold text-violet-600 mt-0.5 shrink-0">
                     {step.num}
                   </span>
-                  <div className="space-y-1 flex-1">
-                    <div className="flex items-center justify-between gap-2">
+                  <div className="space-y-1 flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
                       <h4 className="text-xs font-bold text-slate-900">{step.title}</h4>
                       <span className="text-[10px] font-bold bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded border border-emerald-200/60 shrink-0">
                         {step.badge}
                       </span>
                     </div>
-                    <p className="text-[11px] text-slate-600 leading-relaxed">
+                    <p className="text-[11px] text-slate-600 leading-relaxed break-words">
                       {step.desc}
                     </p>
                   </div>

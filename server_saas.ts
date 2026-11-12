@@ -970,6 +970,120 @@ export const saasDb = {
     return { success: true, ad: newAd, transaction: tx };
   },
 
+  adminAddCreatorAd(payload: {
+    name: string;
+    tagline: string;
+    description?: string;
+    url: string;
+    logoUrl: string;
+    category?: string;
+    badge?: string;
+    advertiserEmail?: string;
+    cycleDays?: number;
+    status?: "active" | "pending" | "expired";
+  }): { success: boolean; ad: CreatorToolAd } {
+    const store = loadStore();
+    if (!store.creatorAds) {
+      store.creatorAds = [...DEFAULT_CREATOR_TOOL_ADS];
+    }
+
+    const cycleDays = payload.cycleDays && payload.cycleDays > 0 ? payload.cycleDays : 365;
+    const newAd: CreatorToolAd = {
+      id: `ad_admin_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      name: payload.name.trim(),
+      tagline: payload.tagline.trim(),
+      description: payload.description?.trim() || "Official featured partner tool.",
+      url: payload.url.trim(),
+      logoUrl: payload.logoUrl.trim(),
+      category: payload.category?.trim() || "Music Tech & Growth",
+      price: 0,
+      cycleDays,
+      badge: payload.badge?.trim() || "Featured Partner",
+      advertiserEmail: (payload.advertiserEmail || "admin@socialclipper.io").trim().toLowerCase(),
+      createdAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + cycleDays * 24 * 60 * 60 * 1000).toISOString(),
+      status: payload.status || "active"
+    };
+
+    store.creatorAds.unshift(newAd);
+    saveStore(store);
+    return { success: true, ad: newAd };
+  },
+
+  updateCreatorAd(
+    adId: string,
+    updates: Partial<CreatorToolAd>
+  ): { success: boolean; ad?: CreatorToolAd; error?: string } {
+    const store = loadStore();
+    if (!store.creatorAds) {
+      store.creatorAds = [...DEFAULT_CREATOR_TOOL_ADS];
+    }
+
+    const adIndex = store.creatorAds.findIndex((a) => a.id === adId);
+    if (adIndex === -1) {
+      return { success: false, error: "Tool / Brand not found" };
+    }
+
+    const existing = store.creatorAds[adIndex];
+    const updated: CreatorToolAd = {
+      ...existing,
+      ...updates,
+      id: existing.id // preserve ID
+    };
+
+    if (updates.name) updated.name = updates.name.trim();
+    if (updates.tagline) updated.tagline = updates.tagline.trim();
+    if (updates.url) updated.url = updates.url.trim();
+    if (updates.logoUrl) updated.logoUrl = updates.logoUrl.trim();
+
+    store.creatorAds[adIndex] = updated;
+    saveStore(store);
+    return { success: true, ad: updated };
+  },
+
+  batchAddCreatorAds(
+    brands: Array<{
+      name: string;
+      tagline: string;
+      description?: string;
+      url: string;
+      logoUrl: string;
+      category?: string;
+      badge?: string;
+      advertiserEmail?: string;
+      cycleDays?: number;
+    }>
+  ): { success: boolean; count: number; ads: CreatorToolAd[] } {
+    const store = loadStore();
+    if (!store.creatorAds) {
+      store.creatorAds = [...DEFAULT_CREATOR_TOOL_ADS];
+    }
+
+    const newAds: CreatorToolAd[] = brands.map((b) => {
+      const cycleDays = b.cycleDays || 365;
+      return {
+        id: `ad_batch_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        name: (b.name || "Creator Tool").trim(),
+        tagline: (b.tagline || "Essential Tool for Video Creators").trim(),
+        description: b.description?.trim() || "Curated creator tool partner.",
+        url: (b.url || "https://socialclipper.io").trim(),
+        logoUrl: (b.logoUrl || "/assets/aistudio/1991_1910e85f.jpg").trim(),
+        category: b.category?.trim() || "Music Tech & Production",
+        price: 0,
+        cycleDays,
+        badge: b.badge?.trim() || "Verified Partner",
+        advertiserEmail: (b.advertiserEmail || "partnerships@socialclipper.io").trim().toLowerCase(),
+        createdAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + cycleDays * 24 * 60 * 60 * 1000).toISOString(),
+        status: "active" as const
+      };
+    });
+
+    store.creatorAds.unshift(...newAds);
+    saveStore(store);
+    return { success: true, count: newAds.length, ads: store.creatorAds };
+  },
+
   deleteCreatorAd(adId: string): { success: boolean } {
     const store = loadStore();
     if (!store.creatorAds) return { success: false };

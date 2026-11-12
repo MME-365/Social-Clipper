@@ -26,7 +26,8 @@ import {
   Filter,
   CheckCircle2,
   Activity,
-  ArrowUpDown
+  ArrowUpDown,
+  Key
 } from "lucide-react";
 import {
   AdminOverview,
@@ -111,6 +112,45 @@ export function AdminPanel({
   const [editDownloadsUsed, setEditDownloadsUsed] = useState(0);
   const [editCycleResetDate, setEditCycleResetDate] = useState("");
   const [editStatus, setEditStatus] = useState<"active" | "suspended">("active");
+
+  // Creator Ads management modals & state
+  const [showAddAdModal, setShowAddAdModal] = useState(false);
+  const [editingAd, setEditingAd] = useState<CreatorToolAd | null>(null);
+  const [isSubmittingAd, setIsSubmittingAd] = useState(false);
+
+  // New ad form state
+  const [adName, setAdName] = useState("");
+  const [adTagline, setAdTagline] = useState("");
+  const [adDescription, setAdDescription] = useState("");
+  const [adUrl, setAdUrl] = useState("");
+  const [adLogoUrl, setAdLogoUrl] = useState("");
+  const [adCategory, setAdCategory] = useState("Music Tech & Production");
+  const [adBadge, setAdBadge] = useState("Featured Partner");
+  const [adAdvertiserEmail, setAdAdvertiserEmail] = useState("partner@socialclipper.io");
+  const [adCycleDays, setAdCycleDays] = useState(365);
+
+  // Edit ad form state
+  const [editAdName, setEditAdName] = useState("");
+  const [editAdTagline, setEditAdTagline] = useState("");
+  const [editAdDescription, setEditAdDescription] = useState("");
+  const [editAdUrl, setEditAdUrl] = useState("");
+  const [editAdLogoUrl, setEditAdLogoUrl] = useState("");
+  const [editAdCategory, setEditAdCategory] = useState("");
+  const [editAdBadge, setEditAdBadge] = useState("");
+  const [editAdAdvertiserEmail, setEditAdAdvertiserEmail] = useState("");
+  const [editAdStatus, setEditAdStatus] = useState<"active" | "pending" | "expired">("active");
+
+  // YouTube Cookies state
+  const [ytCookiesText, setYtCookiesText] = useState("");
+  const [hasYtCookies, setHasYtCookies] = useState(false);
+  const [savingCookies, setSavingCookies] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/saas/admin/youtube-cookies")
+      .then((r) => r.json())
+      .then((d) => setHasYtCookies(Boolean(d.hasCookies)))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     setPlans(overview.plans);
@@ -274,6 +314,270 @@ export function AdminPanel({
       showToast(err.message || "Failed to delete user.", true);
     } finally {
       setIsSubmittingUserAction(false);
+    }
+  };
+
+  const CURATED_10_BRANDS = [
+    {
+      name: "Splice",
+      tagline: "Royalty-Free Samples & AI Stem Separation",
+      description: "Millions of royalty-free one-shots, loops, presets, and AI stem separation for producers and vertical short creators.",
+      url: "https://splice.com",
+      logoUrl: "/assets/aistudio/1991_1910e85f.jpg",
+      category: "Music Tech & Samples",
+      badge: "Featured Partner",
+      advertiserEmail: "partnership@splice.com",
+      cycleDays: 365
+    },
+    {
+      name: "DistroKid",
+      tagline: "Unlimited Music Distribution & 100% Royalties",
+      description: "Upload music to Spotify, Apple Music, TikTok, and Instagram with 100% earnings retention and instant YouTube Content ID.",
+      url: "https://distrokid.com",
+      logoUrl: "/assets/aistudio/2001_c6af18b3.jpg",
+      category: "Music Distribution",
+      badge: "Top Rated",
+      advertiserEmail: "creators@distrokid.com",
+      cycleDays: 365
+    },
+    {
+      name: "BandLab",
+      tagline: "Cloud DAW, Mobile Studio & Creator Community",
+      description: "Cross-platform cloud digital audio workstation with real-time autotune, loops, and a global community of 60M+ creators.",
+      url: "https://bandlab.com",
+      logoUrl: "/assets/aistudio/2007-removebg-preview_cc9a75cd.png",
+      category: "Cloud DAW & Mobile",
+      badge: "Trending Music Tool",
+      advertiserEmail: "partnerships@bandlab.com",
+      cycleDays: 365
+    },
+    {
+      name: "LANDR",
+      tagline: "AI Audio Mastering, Plugins & Distribution",
+      description: "Instant pro-grade AI mastering engine, sample packs, collaboration tools, and music distribution for independent musicians.",
+      url: "https://landr.com",
+      logoUrl: "/assets/aistudio/1994-removebg-preview_05a69973.png",
+      category: "AI Mastering & Audio",
+      badge: "Verified Utility",
+      advertiserEmail: "support@landr.com",
+      cycleDays: 365
+    },
+    {
+      name: "Suno AI",
+      tagline: "Generative Music Synthesis & Songwriting Engine",
+      description: "Generate full-fidelity original music tracks, stems, and vocal compositions in any genre from natural language text prompts.",
+      url: "https://suno.com",
+      logoUrl: "/assets/aistudio/2013-removebg-preview_f5cc8dba.png",
+      category: "Generative AI Music",
+      badge: "Viral AI Tech",
+      advertiserEmail: "founders@suno.com",
+      cycleDays: 365
+    },
+    {
+      name: "Tracklib",
+      tagline: "Legal Clearance for Real Vinyl & Crate Digging",
+      description: "The world's only record store for sampling. Clear real master tracks and original songs legally in minutes without legal friction.",
+      url: "https://tracklib.com",
+      logoUrl: "/assets/aistudio/1991_1910e85f.jpg",
+      category: "Sample Licensing",
+      badge: "Official Clearance",
+      advertiserEmail: "clearance@tracklib.com",
+      cycleDays: 365
+    },
+    {
+      name: "Output Arcade",
+      tagline: "Playable Loop Synthesizer & Sound Explorer",
+      description: "A revolutionary virtual instrument that transforms playable loops, instruments, and kits with real-time modulation and FX.",
+      url: "https://output.com/arcade",
+      logoUrl: "/assets/aistudio/2001_c6af18b3.jpg",
+      category: "Virtual Instruments",
+      badge: "Top Rated Synth",
+      advertiserEmail: "arcade@output.com",
+      cycleDays: 365
+    },
+    {
+      name: "Soundtrap by Spotify",
+      tagline: "Collaborative Browser-Based Music Studio",
+      description: "Create music together online in real-time. Built-in loops, software instruments, vocal effects, and direct Spotify integration.",
+      url: "https://soundtrap.com",
+      logoUrl: "/assets/aistudio/2007-removebg-preview_cc9a75cd.png",
+      category: "Music Tech & Growth",
+      badge: "Spotify Partner",
+      advertiserEmail: "support@soundtrap.com",
+      cycleDays: 365
+    },
+    {
+      name: "TuneCore",
+      tagline: "Global Distribution, Publishing & Sync Licensing",
+      description: "Get your tracks into digital stores worldwide, collect mechanical royalties, and license songs for film, TV, and gaming placements.",
+      url: "https://tunecore.com",
+      logoUrl: "/assets/aistudio/1994-removebg-preview_05a69973.png",
+      category: "Publishing & Sync",
+      badge: "Industry Leader",
+      advertiserEmail: "sync@tunecore.com",
+      cycleDays: 365
+    },
+    {
+      name: "Epidemic Sound",
+      tagline: "Soundtrack Without Restriction for Social Video",
+      description: "Direct licensing for 40,000+ tracks and 90,000+ sound effects across YouTube, TikTok, Twitch, and Instagram with zero copyright strikes.",
+      url: "https://epidemicsound.com",
+      logoUrl: "/assets/aistudio/2013-removebg-preview_f5cc8dba.png",
+      category: "Creator Audio & SFX",
+      badge: "Copyright Cleared",
+      advertiserEmail: "creators@epidemicsound.com",
+      cycleDays: 365
+    }
+  ];
+
+  const handleOpenAddAd = () => {
+    setAdName("");
+    setAdTagline("");
+    setAdDescription("");
+    setAdUrl("");
+    setAdLogoUrl("/assets/aistudio/1991_1910e85f.jpg");
+    setAdCategory("Music Tech & Production");
+    setAdBadge("Featured Partner");
+    setAdAdvertiserEmail("partnership@brand.io");
+    setAdCycleDays(365);
+    setShowAddAdModal(true);
+  };
+
+  const handleCreateAdSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!adName.trim() || !adUrl.trim()) {
+      showToast("Tool name and target URL are required.", true);
+      return;
+    }
+    setIsSubmittingAd(true);
+    try {
+      const res = await fetch("/api/saas/admin/creator-ads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: adName.trim(),
+          tagline: adTagline.trim(),
+          description: adDescription.trim(),
+          url: adUrl.trim(),
+          logoUrl: adLogoUrl.trim() || "/assets/aistudio/1991_1910e85f.jpg",
+          category: adCategory,
+          badge: adBadge,
+          advertiserEmail: adAdvertiserEmail.trim(),
+          cycleDays: Number(adCycleDays) || 365
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setAds([data.ad, ...ads]);
+        showToast(`Partner Brand "${data.ad.name}" added successfully without fee!`);
+        setShowAddAdModal(false);
+        if (onRefreshAds) onRefreshAds();
+      } else {
+        throw new Error(data.error || "Failed to add brand");
+      }
+    } catch (err: any) {
+      showToast(err.message || "Failed to insert brand", true);
+    } finally {
+      setIsSubmittingAd(false);
+    }
+  };
+
+  const handleOpenEditAd = (ad: CreatorToolAd) => {
+    setEditingAd(ad);
+    setEditAdName(ad.name);
+    setEditAdTagline(ad.tagline);
+    setEditAdDescription(ad.description || "");
+    setEditAdUrl(ad.url);
+    setEditAdLogoUrl(ad.logoUrl);
+    setEditAdCategory(ad.category);
+    setEditAdBadge(ad.badge || "Featured Partner");
+    setEditAdAdvertiserEmail(ad.advertiserEmail || "");
+    setEditAdStatus(ad.status || "active");
+  };
+
+  const handleSaveEditAdSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!editingAd) return;
+    setIsSubmittingAd(true);
+    try {
+      const res = await fetch(`/api/saas/creator-ads/${editingAd.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: editAdName.trim(),
+          tagline: editAdTagline.trim(),
+          description: editAdDescription.trim(),
+          url: editAdUrl.trim(),
+          logoUrl: editAdLogoUrl.trim(),
+          category: editAdCategory,
+          badge: editAdBadge,
+          advertiserEmail: editAdAdvertiserEmail.trim(),
+          status: editAdStatus
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setAds(ads.map((a) => (a.id === editingAd.id ? data.ad : a)));
+        showToast(`Partner Brand "${data.ad.name}" updated on the fly!`);
+        setEditingAd(null);
+        if (onRefreshAds) onRefreshAds();
+      } else {
+        throw new Error(data.error || "Failed to update brand");
+      }
+    } catch (err: any) {
+      showToast(err.message || "Failed to update brand", true);
+    } finally {
+      setIsSubmittingAd(false);
+    }
+  };
+
+  const handleQuickInsert10Brands = async () => {
+    if (!window.confirm("Insert 10 curated music tech & creator partner brands (Splice, DistroKid, BandLab, LANDR, Suno AI, Tracklib, Output, Soundtrap, TuneCore, Epidemic Sound) into the live showcase for free?")) {
+      return;
+    }
+    setIsSubmittingAd(true);
+    try {
+      const res = await fetch("/api/saas/admin/batch-creator-ads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ brands: CURATED_10_BRANDS })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setAds(data.ads);
+        showToast(`Successfully inserted ${data.count} curated partner brands into the carousel!`);
+        if (onRefreshAds) onRefreshAds();
+      } else {
+        throw new Error(data.error || "Batch insertion failed");
+      }
+    } catch (err: any) {
+      showToast(err.message || "Failed to batch insert brands", true);
+    } finally {
+      setIsSubmittingAd(false);
+    }
+  };
+
+  const handleSaveCookies = async (e: FormEvent) => {
+    e.preventDefault();
+    setSavingCookies(true);
+    try {
+      const res = await fetch("/api/saas/admin/youtube-cookies", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cookiesText: ytCookiesText })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setHasYtCookies(true);
+        showToast("YouTube cookies saved! yt-dlp will now authenticate with these credentials.");
+        setYtCookiesText("");
+      } else {
+        throw new Error(data.error || "Failed to save cookies");
+      }
+    } catch (err: any) {
+      showToast(err.message || "Failed to save cookies", true);
+    } finally {
+      setSavingCookies(false);
     }
   };
 
@@ -1488,28 +1792,55 @@ export function AdminPanel({
       {/* Tab 5: Creator Tool Ads Management ($150 / 30 Days) */}
       {activeTab === "creatorAds" && (
         <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-xs space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
             <div>
               <h3 className="font-display font-bold text-base text-slate-900 flex items-center gap-2">
-                <span>Featured Creator Tool Ads Spotlight</span>
+                <span>Featured Creator Tools & Partner Apps</span>
                 <span className="text-[10px] font-extrabold bg-violet-100 text-violet-800 px-2 py-0.5 rounded-full uppercase">
-                  $150 / 30 Days
+                  Showcase Manager
                 </span>
               </h3>
-              <p className="text-xs text-slate-500">
-                Manage partner software tools, AI services, and apps showcased in the carousel above Market Intelligence.
+              <p className="text-xs text-slate-500 mt-0.5">
+                Insert partner software tools on the fly without fees, edit brand copy/URLs in real time, or batch insert partner tools.
               </p>
             </div>
-            <div className="text-xs text-slate-500 font-medium">
-              Total active ads: <strong className="text-slate-900">{ads.length}</strong>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={handleQuickInsert10Brands}
+                disabled={isSubmittingAd}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-violet-200 bg-violet-50 hover:bg-violet-100 text-violet-700 font-bold text-xs transition cursor-pointer"
+                title="1-click insert 10 curated music tech & creator partner brands (Splice, DistroKid, BandLab, LANDR, Suno, etc.) for free"
+              >
+                <Sparkles className="h-3.5 w-3.5 text-violet-600" />
+                <span>+ 10 Curated Brands (Free)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleOpenAddAd}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-bold text-xs shadow-xs transition cursor-pointer"
+              >
+                <UserPlus className="h-3.5 w-3.5" />
+                <span>Add Tool (Free Admin)</span>
+              </button>
             </div>
+          </div>
+
+          <div className="text-xs text-slate-500 font-medium flex items-center justify-between">
+            <span>Total active partner brands in live carousel: <strong className="text-slate-900">{ads.length}</strong></span>
+            <span className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+              Live on Landing Page Carousel
+            </span>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {ads.map((ad) => (
               <div
                 key={ad.id}
-                className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col justify-between space-y-3"
+                className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col justify-between space-y-3 hover:border-violet-300 transition"
               >
                 <div className="flex items-start gap-3">
                   <div
@@ -1522,15 +1853,7 @@ export function AdminPanel({
                     <img
                       src={ad.logoUrl}
                       alt={ad.name}
-                      className={`max-h-full max-w-full object-contain ${
-                        ad.id === "ad_lwe_sentry" || ad.name.toLowerCase().includes("lwe")
-                          ? "translate-x-1.5"
-                          : "translate-x-0"
-                      } ${
-                        ad.id === "ad_socialclipper" || ad.name.toLowerCase().includes("socialclipper")
-                          ? "scale-[1.2]"
-                          : "scale-[1.28]"
-                      }`}
+                      className="max-h-full max-w-full object-contain"
                     />
                   </div>
                   <div className="flex-1 min-w-0">
@@ -1561,26 +1884,89 @@ export function AdminPanel({
                 <div className="pt-2 border-t border-slate-200/80 flex items-center justify-between text-[11px] text-slate-500">
                   <div>
                     <span>Advertiser: </span>
-                    <strong className="text-slate-700">{ad.advertiserEmail || "partner"}</strong>
+                    <strong className="text-slate-700">{ad.advertiserEmail || "Admin Inserted"}</strong>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      if (window.confirm(`Are you sure you want to remove ${ad.name} from the carousel?`)) {
-                        await fetch(`/api/saas/creator-ads/${ad.id}`, { method: "DELETE" });
-                        setAds(ads.filter((a) => a.id !== ad.id));
-                        if (onRefreshAds) onRefreshAds();
-                      }
-                    }}
-                    className="p-1 rounded-md text-rose-500 hover:bg-rose-50 transition cursor-pointer"
-                    title="Remove Ad"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEditAd(ad)}
+                      className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-700 transition cursor-pointer"
+                      title="Edit Brand details on the fly"
+                    >
+                      <Pencil className="h-3.5 w-3.5 text-slate-600" />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (window.confirm(`Are you sure you want to remove ${ad.name} from the carousel?`)) {
+                          await fetch(`/api/saas/creator-ads/${ad.id}`, { method: "DELETE" });
+                          setAds(ads.filter((a) => a.id !== ad.id));
+                          if (onRefreshAds) onRefreshAds();
+                          showToast(`Removed "${ad.name}" from partner ads.`);
+                        }
+                      }}
+                      className="p-1.5 rounded-lg border border-slate-200 hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition cursor-pointer"
+                      title="Remove Brand"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
+          </div>
+
+          {/* YouTube Server Stream Authentication & Cookies Section */}
+          <div className="pt-4 border-t border-slate-200 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="font-display font-bold text-sm text-slate-900 flex items-center gap-2">
+                  <Key className="h-4 w-4 text-violet-600" />
+                  <span>YouTube Stream Engine & Bot-Protection Bypass</span>
+                </h4>
+                <p className="text-xs text-slate-500">
+                  YouTube blocks automated data center IP addresses (Google Cloud, AWS). Supplying exported Netscape cookies allows <code className="font-mono text-violet-700">yt-dlp</code> to fetch 1080p source streams directly without bot checks.
+                </p>
+              </div>
+              <div className="flex items-center gap-1.5 text-xs">
+                <span className="font-semibold text-slate-600">Status:</span>
+                {hasYtCookies ? (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-[10px]">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+                    Cookies Active
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200 font-bold text-[10px]">
+                    <span className="h-1.5 w-1.5 rounded-full bg-amber-500"></span>
+                    No Cookies (Upload Mode Active)
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveCookies} className="space-y-2">
+              <textarea
+                value={ytCookiesText}
+                onChange={(e) => setYtCookiesText(e.target.value)}
+                placeholder="# Netscape HTTP Cookie File&#10;# Paste exported YouTube cookies here (from 'Get cookies.txt locally' browser extension)&#10;.youtube.com&#9;TRUE&#9;/&#9;TRUE&#9;..."
+                rows={3}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-mono text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-violet-500"
+              />
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-slate-400">
+                  Tip: Users can also upload their source video file (MP4/MOV) directly with 1-click in the studio for zero-friction 9:16 vertical exports!
+                </span>
+                <button
+                  type="submit"
+                  disabled={savingCookies || !ytCookiesText.trim()}
+                  className="px-4 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs transition cursor-pointer disabled:opacity-50"
+                >
+                  {savingCookies ? "Saving..." : "Save YouTube Cookies"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -2074,6 +2460,431 @@ export function AdminPanel({
                 )}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+      {/* MODAL 5: Add Partner Brand (Free Admin Bypass) */}
+      {showAddAdModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto animate-fade-in">
+          <div className="bg-white rounded-2xl max-w-2xl w-full border border-slate-200 shadow-2xl p-6 space-y-5 my-8 animate-scale-in">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-emerald-50 text-emerald-700">
+                  <Sparkles className="h-5 w-5" />
+                </div>
+                <div>
+                  <h4 className="font-display font-bold text-base text-slate-900">
+                    Add Partner Tool / App (Free Admin Bypass)
+                  </h4>
+                  <p className="text-xs text-slate-500">
+                    Insert any brand into Featured Creator Tools & Partner Apps with $0 payment required.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddAdModal(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateAdSubmit} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Brand / Tool Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={adName}
+                    onChange={(e) => setAdName(e.target.value)}
+                    placeholder="e.g. Splice, DistroKid, LANDR"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Tagline *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={adTagline}
+                    onChange={(e) => setAdTagline(e.target.value)}
+                    placeholder="e.g. Royalty-Free Samples & AI Stems"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Destination URL *
+                  </label>
+                  <input
+                    type="url"
+                    required
+                    value={adUrl}
+                    onChange={(e) => setAdUrl(e.target.value)}
+                    placeholder="https://example.com"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Category
+                  </label>
+                  <select
+                    value={adCategory}
+                    onChange={(e) => setAdCategory(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="Music Tech & Production">Music Tech & Production</option>
+                    <option value="Music Distribution">Music Distribution</option>
+                    <option value="Cloud DAW & Mobile">Cloud DAW & Mobile</option>
+                    <option value="AI Mastering & Audio">AI Mastering & Audio</option>
+                    <option value="Generative AI Music">Generative AI Music</option>
+                    <option value="Sample Licensing">Sample Licensing</option>
+                    <option value="Virtual Instruments">Virtual Instruments</option>
+                    <option value="Creator Audio & SFX">Creator Audio & SFX</option>
+                    <option value="Publishing & Sync">Publishing & Sync</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Badge Text
+                  </label>
+                  <input
+                    type="text"
+                    value={adBadge}
+                    onChange={(e) => setAdBadge(e.target.value)}
+                    placeholder="Featured Partner, Top Rated, Viral AI Tech"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Duration (Days)
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={3650}
+                    value={adCycleDays}
+                    onChange={(e) => setAdCycleDays(Number(e.target.value))}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Logo Image URL
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={adLogoUrl}
+                    onChange={(e) => setAdLogoUrl(e.target.value)}
+                    placeholder="/assets/aistudio/... or https://..."
+                    className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                  {adLogoUrl && (
+                    <img
+                      src={adLogoUrl}
+                      alt="Logo Preview"
+                      className="h-9 w-9 rounded-lg border border-slate-200 object-cover bg-white"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = "/assets/aistudio/1991_1910e85f.jpg";
+                      }}
+                    />
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  <span className="text-[10px] text-slate-400 self-center">Presets:</span>
+                  {[
+                    { label: "Preset 1", url: "/assets/aistudio/1991_1910e85f.jpg" },
+                    { label: "Preset 2", url: "/assets/aistudio/2001_c6af18b3.jpg" },
+                    { label: "Preset 3", url: "/assets/aistudio/2007-removebg-preview_cc9a75cd.png" },
+                    { label: "Preset 4", url: "/assets/aistudio/1994-removebg-preview_05a69973.png" },
+                    { label: "Preset 5", url: "/assets/aistudio/2013-removebg-preview_f5cc8dba.png" }
+                  ].map((p, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => setAdLogoUrl(p.url)}
+                      className="px-2 py-0.5 rounded text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-600 transition"
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Description
+                </label>
+                <textarea
+                  rows={2}
+                  value={adDescription}
+                  onChange={(e) => setAdDescription(e.target.value)}
+                  placeholder="Short description of what the tool does and why creators love it..."
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Advertiser / Contact Email
+                </label>
+                <input
+                  type="email"
+                  value={adAdvertiserEmail}
+                  onChange={(e) => setAdAdvertiserEmail(e.target.value)}
+                  placeholder="contact@brand.io"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowAddAdModal(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-semibold transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingAd}
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {isSubmittingAd ? (
+                    <>
+                      <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                      <span>Publishing Brand...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="h-3.5 w-3.5" />
+                      <span>Publish Brand Now ($0 Bypass)</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 6: Edit Partner Brand On The Fly */}
+      {editingAd && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto animate-fade-in">
+          <div className="bg-white rounded-2xl max-w-2xl w-full border border-slate-200 shadow-2xl p-6 space-y-5 my-8 animate-scale-in">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-indigo-50 text-indigo-700">
+                  <Pencil className="h-5 w-5" />
+                </div>
+                <div>
+                  <h4 className="font-display font-bold text-base text-slate-900">
+                    Edit Partner Brand On The Fly
+                  </h4>
+                  <p className="text-xs text-slate-500">
+                    Modifying <strong className="text-slate-800">{editingAd.name}</strong> • Instant live update across the portal
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingAd(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditAdSubmit} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Brand / Tool Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editAdName}
+                    onChange={(e) => setEditAdName(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Tagline *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editAdTagline}
+                    onChange={(e) => setEditAdTagline(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Destination URL *
+                  </label>
+                  <input
+                    type="url"
+                    required
+                    value={editAdUrl}
+                    onChange={(e) => setEditAdUrl(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Category
+                  </label>
+                  <select
+                    value={editAdCategory}
+                    onChange={(e) => setEditAdCategory(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="Music Tech & Production">Music Tech & Production</option>
+                    <option value="Music Distribution">Music Distribution</option>
+                    <option value="Cloud DAW & Mobile">Cloud DAW & Mobile</option>
+                    <option value="AI Mastering & Audio">AI Mastering & Audio</option>
+                    <option value="Generative AI Music">Generative AI Music</option>
+                    <option value="Sample Licensing">Sample Licensing</option>
+                    <option value="Virtual Instruments">Virtual Instruments</option>
+                    <option value="Creator Audio & SFX">Creator Audio & SFX</option>
+                    <option value="Publishing & Sync">Publishing & Sync</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Badge Text
+                  </label>
+                  <input
+                    type="text"
+                    value={editAdBadge}
+                    onChange={(e) => setEditAdBadge(e.target.value)}
+                    placeholder="Featured Partner, Top Rated, etc."
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Status
+                  </label>
+                  <select
+                    value={editAdStatus}
+                    onChange={(e) => setEditAdStatus(e.target.value as any)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="active">Active (Visible)</option>
+                    <option value="pending">Pending Approval</option>
+                    <option value="expired">Expired (Hidden)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Logo Image URL
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={editAdLogoUrl}
+                    onChange={(e) => setEditAdLogoUrl(e.target.value)}
+                    className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                  {editAdLogoUrl && (
+                    <img
+                      src={editAdLogoUrl}
+                      alt="Logo Preview"
+                      className="h-9 w-9 rounded-lg border border-slate-200 object-cover bg-white"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = "/assets/aistudio/1991_1910e85f.jpg";
+                      }}
+                    />
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Description
+                </label>
+                <textarea
+                  rows={2}
+                  value={editAdDescription}
+                  onChange={(e) => setEditAdDescription(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Advertiser / Contact Email
+                </label>
+                <input
+                  type="email"
+                  value={editAdAdvertiserEmail}
+                  onChange={(e) => setEditAdAdvertiserEmail(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingAd(null)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-semibold transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingAd}
+                  className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs transition cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {isSubmittingAd ? (
+                    <>
+                      <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                      <span>Saving Changes...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-3.5 w-3.5" />
+                      <span>Save Changes On The Fly</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
