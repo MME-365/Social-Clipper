@@ -141,13 +141,23 @@ export function AdminPanel({
   const [editAdAdvertiserEmail, setEditAdAdvertiserEmail] = useState("");
   const [editAdStatus, setEditAdStatus] = useState<"active" | "pending" | "expired">("active");
 
-  // YouTube Cookies state
+  // YouTube Cookies, OAuth2 & Proxy state
   const [ytCookiesText, setYtCookiesText] = useState("");
   const [hasYtCookies, setHasYtCookies] = useState(false);
   const [cookieCount, setCookieCount] = useState(0);
   const [savingCookies, setSavingCookies] = useState(false);
   const [testingCookies, setTestingCookies] = useState(false);
   const [cookieTestResult, setCookieTestResult] = useState<{ working: boolean; message: string } | null>(null);
+
+  const [ytOAuthConnected, setYtOAuthConnected] = useState(false);
+  const [ytOAuthCode, setYtOAuthCode] = useState<string | null>(null);
+  const [ytOAuthUrl, setYtOAuthUrl] = useState<string>("https://www.google.com/device");
+  const [startingOAuth, setStartingOAuth] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
+
+  const [ytProxyUrl, setYtProxyUrl] = useState("");
+  const [hasYtProxy, setHasYtProxy] = useState(false);
+  const [savingProxy, setSavingProxy] = useState(false);
 
   useEffect(() => {
     fetch("/api/saas/admin/youtube-cookies")
@@ -157,7 +167,40 @@ export function AdminPanel({
         setCookieCount(Number(d.cookieLineCount) || 0);
       })
       .catch(() => {});
+
+    fetch("/api/saas/admin/youtube-oauth/status")
+      .then((r) => r.json())
+      .then((d) => {
+        setYtOAuthConnected(Boolean(d.connected));
+        if (d.pending && d.userCode) {
+          setYtOAuthCode(d.userCode);
+          setYtOAuthUrl(d.verificationUrl || "https://www.google.com/device");
+        }
+      })
+      .catch(() => {});
+
+    fetch("/api/saas/admin/youtube-proxy")
+      .then((r) => r.json())
+      .then((d) => setHasYtProxy(Boolean(d.hasProxy)))
+      .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!ytOAuthCode || ytOAuthConnected) return;
+    const timer = setInterval(async () => {
+      try {
+        const res = await fetch("/api/saas/admin/youtube-oauth/status");
+        const data = await res.json();
+        if (data.connected) {
+          setYtOAuthConnected(true);
+          setYtOAuthCode(null);
+          showToast("YouTube Cloud Engine connected! All YouTube URLs now extract & download in 9:16 automatically.");
+          clearInterval(timer);
+        }
+      } catch {}
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [ytOAuthCode, ytOAuthConnected]);
 
   useEffect(() => {
     setPlans(overview.plans);
@@ -652,6 +695,57 @@ export function AdminPanel({
       showToast(err.message || "Failed to clear cookies", true);
     } finally {
       setSavingCookies(false);
+    }
+  };
+
+  const handleStartOAuth = async () => {
+    setStartingOAuth(true);
+    try {
+      const res = await fetch("/api/saas/admin/youtube-oauth/start", { method: "POST" });
+      const data = await res.json();
+      if (res.ok && data.success && data.userCode) {
+        setYtOAuthCode(data.userCode);
+        setYtOAuthUrl(data.verificationUrl || "https://www.google.com/device");
+      } else {
+        throw new Error(data.error || "Failed to generate device login code");
+      }
+    } catch (err: any) {
+      showToast(err.message || "Could not start YouTube authentication", true);
+    } finally {
+      setStartingOAuth(false);
+    }
+  };
+
+  const handleDisconnectOAuth = async () => {
+    try {
+      await fetch("/api/saas/admin/youtube-oauth", { method: "DELETE" });
+      setYtOAuthConnected(false);
+      setYtOAuthCode(null);
+      showToast("Disconnected YouTube OAuth session.");
+    } catch (err: any) {
+      showToast("Failed to disconnect OAuth.", true);
+    }
+  };
+
+  const handleSaveProxy = async (e: FormEvent) => {
+    e.preventDefault();
+    setSavingProxy(true);
+    try {
+      const res = await fetch("/api/saas/admin/youtube-proxy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ proxyUrl: ytProxyUrl })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setHasYtProxy(Boolean(data.hasProxy));
+        setYtProxyUrl("");
+        showToast(data.message || "Proxy updated!");
+      }
+    } catch (err: any) {
+      showToast("Failed to save proxy URL", true);
+    } finally {
+      setSavingProxy(false);
     }
   };
 
@@ -1992,134 +2086,236 @@ export function AdminPanel({
             ))}
           </div>
 
-          {/* YouTube Server Stream Authentication & Cookies Section (Option A) */}
-          <div className="pt-5 border-t border-slate-200 space-y-4">
+          {/* YouTube Server Stream Authentication Section (Option A: Automatic URL Downloads) */}
+          <div className="pt-5 border-t border-slate-200 space-y-5">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
                 <h4 className="font-display font-bold text-sm text-slate-900 flex items-center gap-2">
                   <Key className="h-4 w-4 text-violet-600" />
-                  <span>Option A: YouTube Automatic URL Engine & Bot-Protection Bypass</span>
+                  <span>YouTube Automatic URL Engine (No User Uploads Needed)</span>
                 </h4>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  YouTube blocks automated data center IP addresses (Google Cloud, AWS). Uploading exported Netscape cookies lets <code className="font-mono text-violet-700">yt-dlp</code> fetch 1080p streams automatically for every YouTube link.
+                  Connect once via mobile/desktop code below so EVERY user who pastes a YouTube URL automatically gets 1080p stream downloads & 9:16 vertical MP4 exports without uploading any file.
                 </p>
               </div>
               <div className="flex items-center gap-1.5 text-xs shrink-0">
-                <span className="font-semibold text-slate-600">Status:</span>
-                {hasYtCookies ? (
+                <span className="font-semibold text-slate-600">Engine:</span>
+                {ytOAuthConnected || hasYtCookies || hasYtProxy ? (
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-[11px]">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                    Active ({cookieCount} entries)
+                    {ytOAuthConnected ? "OAuth Connected" : hasYtCookies ? `Cookies Active (${cookieCount})` : "Proxy Active"}
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-50 text-amber-700 border border-amber-200 font-bold text-[11px]">
                     <span className="h-1.5 w-1.5 rounded-full bg-amber-500"></span>
-                    No Cookies (Upload Fallback Active)
+                    Not Connected Yet
                   </span>
                 )}
               </div>
             </div>
 
-            {/* 3-Step Option A Instructions */}
-            <div className="bg-violet-50/60 border border-violet-200/70 rounded-xl p-3.5 text-xs text-slate-700 space-y-1.5">
-              <div className="font-bold text-violet-900 text-[11px] uppercase tracking-wide">
-                How to Enable Automatic YouTube URL Downloads (2 Minutes)
+            {/* Method 1 (Easiest - Works on Phone or Desktop in 15 Seconds): Device OAuth2 */}
+            <div className="bg-linear-to-br from-violet-50 to-indigo-50/60 border border-violet-200 rounded-2xl p-4 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <span className="inline-block text-[10px] font-bold uppercase tracking-wider text-violet-700 bg-white px-2 py-0.5 rounded-md border border-violet-200 mb-1">
+                    Recommended • Works on Mobile & Desktop
+                  </span>
+                  <h5 className="font-bold text-xs sm:text-sm text-slate-900">
+                    1-Click YouTube Device Connect (No Extensions Required)
+                  </h5>
+                  <p className="text-[11px] text-slate-600 mt-0.5">
+                    Sign in with a spare/studio Google account once. Tokens auto-refresh permanently on the server.
+                  </p>
+                </div>
+
+                {ytOAuthConnected ? (
+                  <button
+                    type="button"
+                    onClick={handleDisconnectOAuth}
+                    className="px-3.5 py-2 rounded-xl border border-rose-200 bg-white text-rose-700 hover:bg-rose-50 font-bold text-xs transition cursor-pointer shrink-0"
+                  >
+                    Disconnect OAuth
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleStartOAuth}
+                    disabled={startingOAuth}
+                    className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-bold text-xs shadow-sm transition cursor-pointer disabled:opacity-50 shrink-0 flex items-center gap-1.5"
+                  >
+                    {startingOAuth ? (
+                      <>
+                        <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                        <span>Generating Code...</span>
+                      </>
+                    ) : (
+                      <>
+                        <ShieldCheck className="h-3.5 w-3.5" />
+                        <span>Connect YouTube Engine</span>
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
-              <ol className="list-decimal list-inside space-y-1 text-[11px] leading-relaxed text-slate-600">
-                <li>
-                  Open Chrome/Edge on Desktop, sign in to <strong className="text-slate-800">youtube.com</strong> (recommended: an incognito/dedicated account), and install the <strong className="text-slate-800">Get cookies.txt LOCALLY</strong> browser extension.
-                </li>
-                <li>
-                  While on <code className="bg-white px-1 py-0.5 rounded border border-violet-200 text-violet-800 font-mono">youtube.com</code>, click the extension and choose <strong className="text-slate-800">Export</strong> (saves <code className="font-mono">cookies.txt</code>) or <strong className="text-slate-800">Copy</strong>.
-                </li>
-                <li>
-                  Click <strong className="text-slate-800">Upload cookies.txt</strong> or paste below, then click <strong className="text-slate-800">Test Cookies Live</strong> to verify.
-                </li>
-              </ol>
-            </div>
 
-            <form onSubmit={(e) => handleSaveCookies(e)} className="space-y-3">
-              <textarea
-                value={ytCookiesText}
-                onChange={(e) => setYtCookiesText(e.target.value)}
-                placeholder="# Netscape HTTP Cookie File&#10;# Paste exported YouTube cookies here or click 'Upload cookies.txt' below&#10;.youtube.com&#9;TRUE&#9;/&#9;TRUE&#9;..."
-                rows={4}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-mono text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-violet-500"
-              />
-
-              {cookieTestResult && (
-                <div
-                  className={`p-3 rounded-xl border text-xs font-medium flex items-start gap-2 ${
-                    cookieTestResult.working
-                      ? "bg-emerald-50 border-emerald-200 text-emerald-800"
-                      : "bg-rose-50 border-rose-200 text-rose-800"
-                  }`}
-                >
-                  {cookieTestResult.working ? (
-                    <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
-                  ) : (
-                    <AlertCircle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
-                  )}
-                  <span>{cookieTestResult.message}</span>
+              {ytOAuthCode && !ytOAuthConnected && (
+                <div className="bg-white border border-violet-200 rounded-xl p-4 space-y-3 shadow-xs">
+                  <div className="text-xs font-semibold text-slate-700">
+                    Enter this activation code at <strong className="text-violet-700">google.com/device</strong>:
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <div className="px-4 py-2.5 bg-slate-900 text-white font-mono text-lg font-bold tracking-widest rounded-xl select-all">
+                      {ytOAuthCode}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(ytOAuthCode);
+                        setCopiedCode(true);
+                        setTimeout(() => setCopiedCode(false), 2500);
+                      }}
+                      className="px-3.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs transition cursor-pointer"
+                    >
+                      {copiedCode ? "Copied Code!" : "Copy Code"}
+                    </button>
+                    <a
+                      href={ytOAuthUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition"
+                    >
+                      <span>Open google.com/device</span>
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </a>
+                  </div>
+                  <div className="flex items-center gap-2 text-[11px] text-amber-700 font-medium">
+                    <RefreshCw className="h-3 w-3 animate-spin" />
+                    <span>Waiting for confirmation... This updates automatically once you approve on Google.</span>
+                  </div>
                 </div>
               )}
+            </div>
 
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-violet-50 hover:bg-violet-100 border border-violet-200 text-violet-800 font-bold text-xs cursor-pointer transition">
-                    <Upload className="h-3.5 w-3.5" />
-                    <span>Upload cookies.txt</span>
-                    <input
-                      type="file"
-                      accept=".txt,text/plain"
-                      onChange={handleUploadCookiesFile}
-                      className="hidden"
-                    />
-                  </label>
-
-                  {hasYtCookies && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={handleTestCookies}
-                        disabled={testingCookies}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition cursor-pointer disabled:opacity-50"
-                      >
-                        {testingCookies ? (
-                          <>
-                            <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                            <span>Testing YouTube...</span>
-                          </>
-                        ) : (
-                          <>
-                            <ShieldCheck className="h-3.5 w-3.5" />
-                            <span>Test Cookies Live</span>
-                          </>
-                        )}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={handleClearCookies}
-                        disabled={savingCookies}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border border-slate-200 text-slate-600 hover:text-rose-700 hover:bg-rose-50 font-semibold text-xs transition cursor-pointer"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                        <span>Clear</span>
-                      </button>
-                    </>
-                  )}
-                </div>
-
+            {/* Method 2: Residential Proxy (Optional Backup) */}
+            <form onSubmit={handleSaveProxy} className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-800">
+                  Optional Residential Proxy URL (For Unauthenticated High-Volume Downloads)
+                </label>
+                {hasYtProxy && (
+                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                    Proxy Active
+                  </span>
+                )}
+              </div>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  type="text"
+                  value={ytProxyUrl}
+                  onChange={(e) => setYtProxyUrl(e.target.value)}
+                  placeholder="http://username:password@proxy-host:port (leave empty to clear)"
+                  className="flex-1 bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono text-slate-800 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                />
                 <button
                   type="submit"
-                  disabled={savingCookies || !ytCookiesText.trim()}
-                  className="px-4 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs transition cursor-pointer disabled:opacity-50"
+                  disabled={savingProxy}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs transition cursor-pointer shrink-0"
                 >
-                  {savingCookies ? "Saving..." : "Save YouTube Cookies"}
+                  {savingProxy ? "Saving..." : ytProxyUrl.trim() ? "Save Proxy" : "Clear Proxy"}
                 </button>
               </div>
             </form>
+
+            {/* Method 3: Netscape Cookies Upload / Paste */}
+            <div className="border border-slate-200 rounded-xl p-3.5 space-y-3 bg-white">
+              <div className="font-bold text-slate-800 text-xs">
+                Alternative: Upload Desktop Netscape Cookies (<code className="font-mono text-violet-700">cookies.txt</code>)
+              </div>
+
+              <form onSubmit={(e) => handleSaveCookies(e)} className="space-y-3">
+                <textarea
+                  value={ytCookiesText}
+                  onChange={(e) => setYtCookiesText(e.target.value)}
+                  placeholder="# Netscape HTTP Cookie File&#10;# Paste exported YouTube cookies here or click 'Upload cookies.txt' below&#10;.youtube.com&#9;TRUE&#9;/&#9;TRUE&#9;..."
+                  rows={3}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-mono text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-violet-500"
+                />
+
+                {cookieTestResult && (
+                  <div
+                    className={`p-3 rounded-xl border text-xs font-medium flex items-start gap-2 ${
+                      cookieTestResult.working
+                        ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                        : "bg-rose-50 border-rose-200 text-rose-800"
+                    }`}
+                  >
+                    {cookieTestResult.working ? (
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+                    ) : (
+                      <AlertCircle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
+                    )}
+                    <span>{cookieTestResult.message}</span>
+                  </div>
+                )}
+
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-violet-50 hover:bg-violet-100 border border-violet-200 text-violet-800 font-bold text-xs cursor-pointer transition">
+                      <Upload className="h-3.5 w-3.5" />
+                      <span>Upload cookies.txt</span>
+                      <input
+                        type="file"
+                        accept=".txt,text/plain"
+                        onChange={handleUploadCookiesFile}
+                        className="hidden"
+                      />
+                    </label>
+
+                    {hasYtCookies && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={handleTestCookies}
+                          disabled={testingCookies}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition cursor-pointer disabled:opacity-50"
+                        >
+                          {testingCookies ? (
+                            <>
+                              <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                              <span>Testing YouTube...</span>
+                            </>
+                          ) : (
+                            <>
+                              <ShieldCheck className="h-3.5 w-3.5" />
+                              <span>Test Cookies Live</span>
+                            </>
+                          )}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={handleClearCookies}
+                          disabled={savingCookies}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border border-slate-200 text-slate-600 hover:text-rose-700 hover:bg-rose-50 font-semibold text-xs transition cursor-pointer"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          <span>Clear</span>
+                        </button>
+                      </>
+                    )}
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={savingCookies || !ytCookiesText.trim()}
+                    className="px-4 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs transition cursor-pointer disabled:opacity-50"
+                  >
+                    {savingCookies ? "Saving..." : "Save YouTube Cookies"}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
       )}

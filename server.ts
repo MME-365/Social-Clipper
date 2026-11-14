@@ -4,6 +4,7 @@ import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
 import { Ytdl, chooseFormat } from "@distube/ytdl-core";
+import { Innertube } from "youtubei.js";
 import { Readable } from "stream";
 import fs from "fs";
 import { exec, spawn } from "child_process";
@@ -187,6 +188,46 @@ interface DownloadState {
 
 const downloadsStatus = new Map<string, DownloadState>();
 
+const YT_OAUTH_PATH = path.join(process.cwd(), "data", "yt_oauth.json");
+const YT_PROXY_PATH = path.join(process.cwd(), "data", "yt_proxy.txt");
+
+let pendingOAuthState: {
+  userCode: string;
+  verificationUrl: string;
+  expiresAt: number;
+} | null = null;
+
+function getSavedProxyUrl(): string | null {
+  try {
+    if (fs.existsSync(YT_PROXY_PATH)) {
+      const p = fs.readFileSync(YT_PROXY_PATH, "utf8").trim();
+      if (p) return p;
+    }
+  } catch (e) {}
+  return null;
+}
+
+async function getAuthenticatedInnertube(): Promise<Innertube | null> {
+  if (!fs.existsSync(YT_OAUTH_PATH)) return null;
+  try {
+    const raw = fs.readFileSync(YT_OAUTH_PATH, "utf8");
+    const creds = JSON.parse(raw);
+    if (!creds || (!creds.refresh_token && !creds.access_token)) return null;
+
+    const yt = await Innertube.create({ generate_session_locally: true });
+    yt.session.on("update-credentials", ({ credentials }: any) => {
+      try {
+        fs.writeFileSync(YT_OAUTH_PATH, JSON.stringify(credentials, null, 2), "utf8");
+      } catch (e) {}
+    });
+    await yt.session.signIn(creds);
+    return yt;
+  } catch (e: any) {
+    console.warn("Could not restore YouTube OAuth session:", e?.message || e);
+    return null;
+  }
+}
+
 async function runBackgroundDownload(videoId: string) {
   const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
   const state = downloadsStatus.get(videoId);
@@ -205,10 +246,76 @@ async function runBackgroundDownload(videoId: string) {
   }
 
   state.status = "downloading";
-  state.progress = 15;
+  state.progress = 12;
   state.message = "Connecting to YouTube high-definition stream...";
 
-  // 1. Primary engine: yt-dlp standalone binary with node JS runtime
+  // 0. Engine Zero: Authenticated YouTube OAuth2 Session (Mobile-friendly Device Auth — Zero Bot Checks!)
+  if (fs.existsSync(YT_OAUTH_PATH)) {
+    try {
+      state.progress = 20;
+      state.message = "Authenticating HD YouTube session...";
+      const yt = await getAuthenticatedInnertube();
+      if (yt) {
+        const info = await yt.getBasicInfo(videoId, { client: "TV" }).catch(() => yt.getBasicInfo(videoId));
+        if (info?.basic_info?.title && !state.title) state.title = info.basic_info.title;
+
+        const tempV = path.join(DOWNLOADS_DIR, `temp_oauth_v_${videoId}.mp4`);
+        const tempA = path.join(DOWNLOADS_DIR, `temp_oauth_a_${videoId}.m4a`);
+
+        state.progress = 35;
+        state.message = "Streaming 1080p video & audio from YouTube...";
+
+        try {
+          const vStream = await info.download({ type: "video", quality: "best", format: "mp4" });
+          const aStream = await info.download({ type: "audio", quality: "best", format: "mp4" });
+
+          await Promise.all([
+            new Promise<void>((res, rej) => {
+              const dest = fs.createWriteStream(tempV);
+              Readable.fromWeb(vStream as any).pipe(dest);
+              dest.on("finish", () => res());
+              dest.on("error", rej);
+            }),
+            new Promise<void>((res, rej) => {
+              const dest = fs.createWriteStream(tempA);
+              Readable.fromWeb(aStream as any).pipe(dest);
+              dest.on("finish", () => res());
+              dest.on("error", rej);
+            })
+          ]);
+
+          state.progress = 85;
+          state.message = "Muxing 1080p MP4 with FFmpeg...";
+          await execPromise(`ffmpeg -y -i "${tempV}" -i "${tempA}" -c:v copy -c:a aac -shortest "${finalPath}"`);
+          try {
+            if (fs.existsSync(tempV)) fs.unlinkSync(tempV);
+            if (fs.existsSync(tempA)) fs.unlinkSync(tempA);
+          } catch (e) {}
+        } catch (splitErr) {
+          // Single combined video+audio stream fallback via OAuth
+          const combinedStream = await info.download({ type: "video+audio", quality: "best", format: "mp4" });
+          await new Promise<void>((res, rej) => {
+            const dest = fs.createWriteStream(finalPath);
+            Readable.fromWeb(combinedStream as any).pipe(dest);
+            dest.on("finish", () => res());
+            dest.on("error", rej);
+          });
+        }
+
+        if (fs.existsSync(finalPath) && fs.statSync(finalPath).size > 102400) {
+          state.status = "completed";
+          state.progress = 100;
+          state.message = "Video source ready for 9:16 vertical exports!";
+          state.url = `/downloads/${videoId}.mp4`;
+          return;
+        }
+      }
+    } catch (oauthErr: any) {
+      console.warn(`OAuth stream fetch notice for ${videoId}:`, oauthErr?.message || oauthErr);
+    }
+  }
+
+  // 1. Primary fallback engine: yt-dlp standalone binary with cookies / optional proxy
   try {
     const localYtDlp = path.join(process.cwd(), "bin", "yt-dlp");
     if (!fs.existsSync(localYtDlp) && !fs.existsSync("/usr/local/bin/yt-dlp")) {
@@ -225,6 +332,7 @@ async function runBackgroundDownload(videoId: string) {
         : (fs.existsSync("/usr/local/bin/yt-dlp") ? "/usr/local/bin/yt-dlp" : "yt-dlp");
 
       const cookiesPath = path.join(process.cwd(), "data", "cookies.txt");
+      const proxyUrl = getSavedProxyUrl();
       const args = [
         "--js-runtimes", "node",
         "--no-playlist",
@@ -234,6 +342,9 @@ async function runBackgroundDownload(videoId: string) {
 
       if (fs.existsSync(cookiesPath) && fs.statSync(cookiesPath).size > 10) {
         args.push("--cookies", cookiesPath);
+      }
+      if (proxyUrl) {
+        args.push("--proxy", proxyUrl);
       }
 
       args.push("-o", finalPath, videoUrl);
@@ -385,6 +496,10 @@ app.get("/api/youtube-download", async (req, res) => {
     }
 
     let state = downloadsStatus.get(videoId);
+    if (state && state.status === "failed" && req.query.retry === "1") {
+      downloadsStatus.delete(videoId);
+      state = undefined;
+    }
     if (!state) {
       state = {
         status: "downloading",
@@ -1200,6 +1315,139 @@ app.post("/api/saas/admin/test-youtube-cookies", async (req, res) => {
     }
   } catch (err: any) {
     res.status(500).json({ success: false, working: false, message: err.message || "Failed to test cookies" });
+  }
+});
+
+// YouTube Mobile-Friendly Device OAuth2 Endpoints
+app.get("/api/youtube-engine-status", (req, res) => {
+  const cookiesPath = path.join(process.cwd(), "data", "cookies.txt");
+  const hasCookies = fs.existsSync(cookiesPath) && fs.statSync(cookiesPath).size > 10;
+  const hasOAuth = fs.existsSync(YT_OAUTH_PATH);
+  const hasProxy = Boolean(getSavedProxyUrl());
+  res.json({
+    connected: hasOAuth || hasCookies || hasProxy,
+    hasOAuth,
+    hasCookies,
+    hasProxy
+  });
+});
+
+app.get("/api/saas/admin/youtube-oauth/status", (req, res) => {
+  const connected = fs.existsSync(YT_OAUTH_PATH);
+  const pending = pendingOAuthState && Date.now() < pendingOAuthState.expiresAt ? pendingOAuthState : null;
+  res.json({
+    connected,
+    pending: Boolean(pending),
+    userCode: pending?.userCode || null,
+    verificationUrl: pending?.verificationUrl || null
+  });
+});
+
+app.post("/api/saas/admin/youtube-oauth/start", async (req, res) => {
+  try {
+    const dataDir = path.join(process.cwd(), "data");
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+
+    const yt = await Innertube.create({ generate_session_locally: true });
+
+    let responded = false;
+
+    yt.session.on("auth-pending", (data: any) => {
+      pendingOAuthState = {
+        userCode: data.user_code,
+        verificationUrl: data.verification_url || "https://www.google.com/device",
+        expiresAt: Date.now() + (data.expires_in || 1800) * 1000
+      };
+      if (!responded) {
+        responded = true;
+        res.json({
+          success: true,
+          userCode: data.user_code,
+          verificationUrl: data.verification_url || "https://www.google.com/device",
+          expiresIn: data.expires_in || 1800
+        });
+      }
+    });
+
+    yt.session.on("auth", ({ credentials }: any) => {
+      try {
+        fs.writeFileSync(YT_OAUTH_PATH, JSON.stringify(credentials, null, 2), "utf8");
+        pendingOAuthState = null;
+        for (const [id, st] of downloadsStatus.entries()) {
+          if (st.status === "failed") {
+            downloadsStatus.delete(id);
+          }
+        }
+        console.log("YouTube OAuth2 device login succeeded & saved!");
+      } catch (e) {
+        console.error("Failed saving YouTube OAuth credentials:", e);
+      }
+    });
+
+    yt.session.on("update-credentials", ({ credentials }: any) => {
+      try {
+        fs.writeFileSync(YT_OAUTH_PATH, JSON.stringify(credentials, null, 2), "utf8");
+      } catch (e) {}
+    });
+
+    yt.session.on("auth-error", (err: any) => {
+      pendingOAuthState = null;
+      console.warn("YouTube OAuth error:", err);
+      if (!responded) {
+        responded = true;
+        res.status(500).json({ success: false, error: err?.message || "Failed to generate YouTube OAuth code" });
+      }
+    });
+
+    // Trigger signIn (fires auth-pending synchronously/async via event, then polls in background)
+    yt.session.signIn().catch((err: any) => {
+      if (!responded) {
+        responded = true;
+        res.status(500).json({ success: false, error: err?.message || "OAuth initialization failed" });
+      }
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || "Failed to initialize OAuth flow" });
+  }
+});
+
+app.delete("/api/saas/admin/youtube-oauth", (req, res) => {
+  try {
+    pendingOAuthState = null;
+    if (fs.existsSync(YT_OAUTH_PATH)) {
+      fs.unlinkSync(YT_OAUTH_PATH);
+    }
+    res.json({ success: true, connected: false });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to disconnect OAuth" });
+  }
+});
+
+app.get("/api/saas/admin/youtube-proxy", (req, res) => {
+  const proxyUrl = getSavedProxyUrl() || "";
+  res.json({ hasProxy: Boolean(proxyUrl), proxyUrl: proxyUrl ? "Configured (hidden)" : "" });
+});
+
+app.post("/api/saas/admin/youtube-proxy", (req, res) => {
+  try {
+    const dataDir = path.join(process.cwd(), "data");
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+    const cleanProxy = (req.body?.proxyUrl || "").trim();
+    if (!cleanProxy) {
+      if (fs.existsSync(YT_PROXY_PATH)) fs.unlinkSync(YT_PROXY_PATH);
+      return res.json({ success: true, hasProxy: false, message: "Residential proxy removed." });
+    }
+    fs.writeFileSync(YT_PROXY_PATH, cleanProxy, "utf8");
+    for (const [id, st] of downloadsStatus.entries()) {
+      if (st.status === "failed") downloadsStatus.delete(id);
+    }
+    res.json({ success: true, hasProxy: true, message: "Residential proxy saved! YouTube engine updated." });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to save proxy URL" });
   }
 });
 

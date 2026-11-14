@@ -347,7 +347,7 @@ export default function App() {
     return match && match[2].length === 11 ? match[2] : null;
   };
 
-  const pollYtDownloadStatus = (id: string) => {
+  const pollYtDownloadStatus = (id: string, autoExportTarget?: number | "all" | "full" | null) => {
     if (ytPollIntervalRef.current) clearInterval(ytPollIntervalRef.current);
     ytPollIntervalRef.current = setInterval(async () => {
       try {
@@ -357,6 +357,17 @@ export default function App() {
         if (data.status === "completed") {
           clearInterval(ytPollIntervalRef.current);
           setYtCacheStatus({ status: "completed", progress: 100, message: "1080p stream cached & ready for 9:16 export!" });
+          if (autoExportTarget !== undefined && autoExportTarget !== null) {
+            setTimeout(() => {
+              if (autoExportTarget === "all") {
+                handleExportAllClips(true);
+              } else if (autoExportTarget === "full") {
+                handleExportFullVideo(true);
+              } else if (typeof autoExportTarget === "number") {
+                handleExportClip(autoExportTarget, true);
+              }
+            }, 250);
+          }
         } else if (data.status === "failed") {
           clearInterval(ytPollIntervalRef.current);
           setYtCacheStatus({ status: "failed", progress: 0, message: "YouTube direct stream blocked by bot security" });
@@ -367,6 +378,39 @@ export default function App() {
         clearInterval(ytPollIntervalRef.current);
       }
     }, 2500);
+  };
+
+  const handleYoutubeEngineConnected = () => {
+    const targetPending = pendingExportClipIndex;
+    setPendingExportClipIndex(null);
+    setSourceUploadModalOpen(false);
+    setDownloadSuccessMsg("🎉 YouTube Cloud Engine connected! Downloading stream automatically now...");
+    setTimeout(() => setDownloadSuccessMsg(null), 6000);
+
+    if (youtubeId) {
+      setYtCacheStatus({ status: "downloading", progress: 15, message: "Syncing authenticated YouTube HD stream..." });
+      fetch(`/api/youtube-download?id=${youtubeId}&retry=1`)
+        .then((r) => r.json())
+        .then((dlData) => {
+          if (dlData.status === "completed") {
+            setYtCacheStatus({ status: "completed", progress: 100, message: "1080p source stream ready for 9:16 vertical export" });
+            if (targetPending !== null) {
+              setTimeout(() => {
+                if (targetPending === "all") handleExportAllClips(true);
+                else if (targetPending === "full") handleExportFullVideo(true);
+                else if (typeof targetPending === "number") handleExportClip(targetPending, true);
+              }, 250);
+            }
+          } else if (dlData.status === "failed") {
+            setYtCacheStatus({ status: "failed", progress: 0, message: dlData.message || "YouTube cloud stream blocked" });
+          } else {
+            pollYtDownloadStatus(youtubeId, targetPending);
+          }
+        })
+        .catch(() => {
+          pollYtDownloadStatus(youtubeId, targetPending);
+        });
+    }
   };
 
   // Load YouTube Video metadata and mount real stream
@@ -1766,16 +1810,32 @@ export default function App() {
                         <div className="flex items-start sm:items-center gap-2">
                           <ShieldAlert className="h-4 w-4 text-rose-600 shrink-0 mt-0.5 sm:mt-0" />
                           <span className="text-[11px] sm:text-xs">
-                            YouTube bot security blocked cloud scraping. Upload your source file to render your clips without losing any edits!
+                            {isAdminGoogleUser
+                              ? "YouTube Cloud Engine not authorized yet. Connect once in 15s (mobile/browser, no uploads needed) or upload MP4."
+                              : "YouTube bot security blocked cloud scraping. Upload your source file to render your clips without losing any edits!"}
                           </span>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => setSourceUploadModalOpen(true)}
-                          className="bg-rose-600 hover:bg-rose-700 text-white font-bold px-3 py-1 rounded-lg text-xs cursor-pointer shadow-xs whitespace-nowrap self-start sm:self-auto"
-                        >
-                          Upload Source File
-                        </button>
+                        <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+                          {isAdminGoogleUser && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSourceUploadReason("Connect YouTube Device OAuth2 once above to download every YouTube link automatically with zero file uploads.");
+                                setSourceUploadModalOpen(true);
+                              }}
+                              className="bg-violet-600 hover:bg-violet-700 text-white font-bold px-3 py-1 rounded-lg text-xs cursor-pointer shadow-xs whitespace-nowrap"
+                            >
+                              Activate YouTube Engine (15s)
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setSourceUploadModalOpen(true)}
+                            className="bg-rose-600 hover:bg-rose-700 text-white font-bold px-3 py-1 rounded-lg text-xs cursor-pointer shadow-xs whitespace-nowrap"
+                          >
+                            Upload Source File
+                          </button>
+                        </div>
                       </div>
                     )}
                   </>
@@ -2011,7 +2071,7 @@ export default function App() {
         onSuccess={handleBookCreatorAdSuccess}
       />
 
-      {/* Source Video Direct Upload Modal (Ensures Real 9:16 Renders When Cloud Scraping Is Blocked) */}
+      {/* Source Video Direct Upload Modal (With Admin 1-Click Direct YouTube Engine Connect) */}
       <SourceUploadModal
         isOpen={sourceUploadModalOpen}
         onClose={() => {
@@ -2023,6 +2083,8 @@ export default function App() {
         uploadProgress={sourceUploadProgress}
         reason={sourceUploadReason}
         currentVideoTitle={parsedTitle}
+        isAdmin={isAdminGoogleUser}
+        onYoutubeEngineConnected={handleYoutubeEngineConnected}
       />
 
       {/* Clean Footer */}
