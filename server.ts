@@ -1080,22 +1080,127 @@ app.post("/api/saas/admin/batch-creator-ads", (req, res) => {
   }
 });
 
-// YouTube cookies management for bot bypass
+// YouTube cookies management for bot bypass (Option A: Automatic URL Download)
 app.post("/api/saas/admin/youtube-cookies", (req, res) => {
   try {
     const { cookiesText } = req.body;
-    const cookiesPath = path.join(process.cwd(), "data", "cookies.txt");
-    fs.writeFileSync(cookiesPath, cookiesText || "", "utf8");
-    res.json({ success: true, message: "YouTube cookies saved successfully!" });
+    const dataDir = path.join(process.cwd(), "data");
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+    const cookiesPath = path.join(dataDir, "cookies.txt");
+    const cleanText = (cookiesText || "").trim();
+    fs.writeFileSync(cookiesPath, cleanText ? `${cleanText}\n` : "", "utf8");
+
+    // Clear failed download statuses so videos immediately retry with fresh cookies
+    for (const [id, st] of downloadsStatus.entries()) {
+      if (st.status === "failed") {
+        downloadsStatus.delete(id);
+      }
+    }
+
+    const cookieLineCount = cleanText
+      ? cleanText.split(/\r?\n/).filter((l: string) => l.trim() && !l.startsWith("#")).length
+      : 0;
+
+    res.json({
+      success: true,
+      hasCookies: cookieLineCount > 0,
+      cookieLineCount,
+      message: cookieLineCount > 0
+        ? `Saved ${cookieLineCount} YouTube cookie entries! Direct cloud URL downloads unlocked.`
+        : "YouTube cookies cleared."
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Failed to save cookies" });
   }
 });
 
+app.delete("/api/saas/admin/youtube-cookies", (req, res) => {
+  try {
+    const cookiesPath = path.join(process.cwd(), "data", "cookies.txt");
+    if (fs.existsSync(cookiesPath)) {
+      fs.unlinkSync(cookiesPath);
+    }
+    res.json({ success: true, hasCookies: false, message: "YouTube cookies removed." });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to remove cookies" });
+  }
+});
+
 app.get("/api/saas/admin/youtube-cookies", (req, res) => {
   const cookiesPath = path.join(process.cwd(), "data", "cookies.txt");
-  const hasCookies = fs.existsSync(cookiesPath) && fs.statSync(cookiesPath).size > 10;
-  res.json({ hasCookies });
+  const exists = fs.existsSync(cookiesPath) && fs.statSync(cookiesPath).size > 10;
+  let cookieLineCount = 0;
+  let updatedAt: string | null = null;
+  if (exists) {
+    const raw = fs.readFileSync(cookiesPath, "utf8");
+    cookieLineCount = raw.split(/\r?\n/).filter((l) => l.trim() && !l.startsWith("#")).length;
+    updatedAt = fs.statSync(cookiesPath).mtime.toISOString();
+  }
+  res.json({ hasCookies: exists && cookieLineCount > 0, cookieLineCount, updatedAt });
+});
+
+app.post("/api/saas/admin/test-youtube-cookies", async (req, res) => {
+  try {
+    const cookiesPath = path.join(process.cwd(), "data", "cookies.txt");
+    if (!fs.existsSync(cookiesPath) || fs.statSync(cookiesPath).size <= 10) {
+      return res.json({
+        success: true,
+        working: false,
+        message: "No cookies uploaded yet. Paste or upload Netscape cookies.txt first."
+      });
+    }
+
+    const localYtDlp = path.join(process.cwd(), "bin", "yt-dlp");
+    if (!fs.existsSync(localYtDlp) && !fs.existsSync("/usr/local/bin/yt-dlp")) {
+      await execPromise(`mkdir -p "${path.join(process.cwd(), "bin")}" && curl -sL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux -o "${localYtDlp}" && chmod +x "${localYtDlp}"`);
+    }
+
+    const ytDlpBin = fs.existsSync(localYtDlp)
+      ? localYtDlp
+      : (fs.existsSync("/usr/local/bin/yt-dlp") ? "/usr/local/bin/yt-dlp" : "yt-dlp");
+
+    const testUrl = req.body?.testUrl || "https://www.youtube.com/watch?v=fLexgOxsZu0";
+    const result = await new Promise<{ ok: boolean; output: string }>((resolve) => {
+      const proc = spawn(ytDlpBin, [
+        "--js-runtimes", "node",
+        "--no-playlist",
+        "--cookies", cookiesPath,
+        "--print", "%(title)s",
+        "--simulate",
+        testUrl
+      ]);
+      let stdout = "";
+      let stderr = "";
+      proc.stdout.on("data", (d) => (stdout += d.toString()));
+      proc.stderr.on("data", (d) => (stderr += d.toString()));
+      proc.on("close", (code) => {
+        resolve({ ok: code === 0 && stdout.trim().length > 0, output: (stdout || stderr).trim() });
+      });
+      proc.on("error", (err) => {
+        resolve({ ok: false, output: err.message });
+      });
+    });
+
+    if (result.ok) {
+      res.json({
+        success: true,
+        working: true,
+        title: result.output.split("\n")[0],
+        message: `Verified! Direct YouTube extraction works ("${result.output.split("\n")[0]}").`
+      });
+    } else {
+      const cleanErr = result.output.split("\n").find((l) => l.includes("ERROR:")) || result.output.slice(0, 220);
+      res.json({
+        success: true,
+        working: false,
+        message: `Cookies could not bypass YouTube check yet: ${cleanErr || "Try exporting fresh Netscape cookies from an incognito YouTube session."}`
+      });
+    }
+  } catch (err: any) {
+    res.status(500).json({ success: false, working: false, message: err.message || "Failed to test cookies" });
+  }
 });
 
 // Upload custom logo image for Creator Tool Ad

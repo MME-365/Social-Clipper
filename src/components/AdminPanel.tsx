@@ -1,4 +1,4 @@
-import { useState, FormEvent, useEffect } from "react";
+import { useState, FormEvent, ChangeEvent, useEffect } from "react";
 import {
   DollarSign,
   Users,
@@ -27,7 +27,8 @@ import {
   CheckCircle2,
   Activity,
   ArrowUpDown,
-  Key
+  Key,
+  Upload
 } from "lucide-react";
 import {
   AdminOverview,
@@ -143,12 +144,18 @@ export function AdminPanel({
   // YouTube Cookies state
   const [ytCookiesText, setYtCookiesText] = useState("");
   const [hasYtCookies, setHasYtCookies] = useState(false);
+  const [cookieCount, setCookieCount] = useState(0);
   const [savingCookies, setSavingCookies] = useState(false);
+  const [testingCookies, setTestingCookies] = useState(false);
+  const [cookieTestResult, setCookieTestResult] = useState<{ working: boolean; message: string } | null>(null);
 
   useEffect(() => {
     fetch("/api/saas/admin/youtube-cookies")
       .then((r) => r.json())
-      .then((d) => setHasYtCookies(Boolean(d.hasCookies)))
+      .then((d) => {
+        setHasYtCookies(Boolean(d.hasCookies));
+        setCookieCount(Number(d.cookieLineCount) || 0);
+      })
       .catch(() => {});
   }, []);
 
@@ -557,25 +564,92 @@ export function AdminPanel({
     }
   };
 
-  const handleSaveCookies = async (e: FormEvent) => {
-    e.preventDefault();
+  const handleSaveCookies = async (e?: FormEvent, overrideText?: string) => {
+    if (e) e.preventDefault();
+    const payloadText = overrideText !== undefined ? overrideText : ytCookiesText;
+    if (!payloadText.trim()) return;
+
     setSavingCookies(true);
+    setCookieTestResult(null);
     try {
       const res = await fetch("/api/saas/admin/youtube-cookies", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cookiesText: ytCookiesText })
+        body: JSON.stringify({ cookiesText: payloadText })
       });
       const data = await res.json();
       if (res.ok && data.success) {
-        setHasYtCookies(true);
-        showToast("YouTube cookies saved! yt-dlp will now authenticate with these credentials.");
+        setHasYtCookies(Boolean(data.hasCookies));
+        setCookieCount(Number(data.cookieLineCount) || 0);
+        showToast(data.message || "YouTube cookies saved! yt-dlp will now authenticate with these credentials.");
         setYtCookiesText("");
       } else {
         throw new Error(data.error || "Failed to save cookies");
       }
     } catch (err: any) {
       showToast(err.message || "Failed to save cookies", true);
+    } finally {
+      setSavingCookies(false);
+    }
+  };
+
+  const handleUploadCookiesFile = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const content = String(ev.target?.result || "");
+      if (content.trim()) {
+        setYtCookiesText(content);
+        await handleSaveCookies(undefined, content);
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  };
+
+  const handleTestCookies = async () => {
+    setTestingCookies(true);
+    setCookieTestResult(null);
+    try {
+      const res = await fetch("/api/saas/admin/test-youtube-cookies", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({})
+      });
+      const data = await res.json();
+      setCookieTestResult({
+        working: Boolean(data.working),
+        message: data.message || "Test finished."
+      });
+      if (data.working) {
+        showToast("YouTube cookies verified! Direct URL downloads are active.");
+      } else {
+        showToast(data.message || "Cookie test failed.", true);
+      }
+    } catch (err: any) {
+      setCookieTestResult({
+        working: false,
+        message: err.message || "Network error testing cookies."
+      });
+    } finally {
+      setTestingCookies(false);
+    }
+  };
+
+  const handleClearCookies = async () => {
+    setSavingCookies(true);
+    setCookieTestResult(null);
+    try {
+      const res = await fetch("/api/saas/admin/youtube-cookies", { method: "DELETE" });
+      if (res.ok) {
+        setHasYtCookies(false);
+        setCookieCount(0);
+        setYtCookiesText("");
+        showToast("YouTube cookies cleared.");
+      }
+    } catch (err: any) {
+      showToast(err.message || "Failed to clear cookies", true);
     } finally {
       setSavingCookies(false);
     }
@@ -1918,46 +1992,125 @@ export function AdminPanel({
             ))}
           </div>
 
-          {/* YouTube Server Stream Authentication & Cookies Section */}
-          <div className="pt-4 border-t border-slate-200 space-y-3">
-            <div className="flex items-center justify-between">
+          {/* YouTube Server Stream Authentication & Cookies Section (Option A) */}
+          <div className="pt-5 border-t border-slate-200 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
                 <h4 className="font-display font-bold text-sm text-slate-900 flex items-center gap-2">
                   <Key className="h-4 w-4 text-violet-600" />
-                  <span>YouTube Stream Engine & Bot-Protection Bypass</span>
+                  <span>Option A: YouTube Automatic URL Engine & Bot-Protection Bypass</span>
                 </h4>
-                <p className="text-xs text-slate-500">
-                  YouTube blocks automated data center IP addresses (Google Cloud, AWS). Supplying exported Netscape cookies allows <code className="font-mono text-violet-700">yt-dlp</code> to fetch 1080p source streams directly without bot checks.
+                <p className="text-xs text-slate-500 mt-0.5">
+                  YouTube blocks automated data center IP addresses (Google Cloud, AWS). Uploading exported Netscape cookies lets <code className="font-mono text-violet-700">yt-dlp</code> fetch 1080p streams automatically for every YouTube link.
                 </p>
               </div>
-              <div className="flex items-center gap-1.5 text-xs">
+              <div className="flex items-center gap-1.5 text-xs shrink-0">
                 <span className="font-semibold text-slate-600">Status:</span>
                 {hasYtCookies ? (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-[10px]">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
-                    Cookies Active
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-[11px]">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    Active ({cookieCount} entries)
                   </span>
                 ) : (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200 font-bold text-[10px]">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-50 text-amber-700 border border-amber-200 font-bold text-[11px]">
                     <span className="h-1.5 w-1.5 rounded-full bg-amber-500"></span>
-                    No Cookies (Upload Mode Active)
+                    No Cookies (Upload Fallback Active)
                   </span>
                 )}
               </div>
             </div>
 
-            <form onSubmit={handleSaveCookies} className="space-y-2">
+            {/* 3-Step Option A Instructions */}
+            <div className="bg-violet-50/60 border border-violet-200/70 rounded-xl p-3.5 text-xs text-slate-700 space-y-1.5">
+              <div className="font-bold text-violet-900 text-[11px] uppercase tracking-wide">
+                How to Enable Automatic YouTube URL Downloads (2 Minutes)
+              </div>
+              <ol className="list-decimal list-inside space-y-1 text-[11px] leading-relaxed text-slate-600">
+                <li>
+                  Open Chrome/Edge on Desktop, sign in to <strong className="text-slate-800">youtube.com</strong> (recommended: an incognito/dedicated account), and install the <strong className="text-slate-800">Get cookies.txt LOCALLY</strong> browser extension.
+                </li>
+                <li>
+                  While on <code className="bg-white px-1 py-0.5 rounded border border-violet-200 text-violet-800 font-mono">youtube.com</code>, click the extension and choose <strong className="text-slate-800">Export</strong> (saves <code className="font-mono">cookies.txt</code>) or <strong className="text-slate-800">Copy</strong>.
+                </li>
+                <li>
+                  Click <strong className="text-slate-800">Upload cookies.txt</strong> or paste below, then click <strong className="text-slate-800">Test Cookies Live</strong> to verify.
+                </li>
+              </ol>
+            </div>
+
+            <form onSubmit={(e) => handleSaveCookies(e)} className="space-y-3">
               <textarea
                 value={ytCookiesText}
                 onChange={(e) => setYtCookiesText(e.target.value)}
-                placeholder="# Netscape HTTP Cookie File&#10;# Paste exported YouTube cookies here (from 'Get cookies.txt locally' browser extension)&#10;.youtube.com&#9;TRUE&#9;/&#9;TRUE&#9;..."
-                rows={3}
+                placeholder="# Netscape HTTP Cookie File&#10;# Paste exported YouTube cookies here or click 'Upload cookies.txt' below&#10;.youtube.com&#9;TRUE&#9;/&#9;TRUE&#9;..."
+                rows={4}
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-mono text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-violet-500"
               />
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] text-slate-400">
-                  Tip: Users can also upload their source video file (MP4/MOV) directly with 1-click in the studio for zero-friction 9:16 vertical exports!
-                </span>
+
+              {cookieTestResult && (
+                <div
+                  className={`p-3 rounded-xl border text-xs font-medium flex items-start gap-2 ${
+                    cookieTestResult.working
+                      ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                      : "bg-rose-50 border-rose-200 text-rose-800"
+                  }`}
+                >
+                  {cookieTestResult.working ? (
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+                  ) : (
+                    <AlertCircle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
+                  )}
+                  <span>{cookieTestResult.message}</span>
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-violet-50 hover:bg-violet-100 border border-violet-200 text-violet-800 font-bold text-xs cursor-pointer transition">
+                    <Upload className="h-3.5 w-3.5" />
+                    <span>Upload cookies.txt</span>
+                    <input
+                      type="file"
+                      accept=".txt,text/plain"
+                      onChange={handleUploadCookiesFile}
+                      className="hidden"
+                    />
+                  </label>
+
+                  {hasYtCookies && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={handleTestCookies}
+                        disabled={testingCookies}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition cursor-pointer disabled:opacity-50"
+                      >
+                        {testingCookies ? (
+                          <>
+                            <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                            <span>Testing YouTube...</span>
+                          </>
+                        ) : (
+                          <>
+                            <ShieldCheck className="h-3.5 w-3.5" />
+                            <span>Test Cookies Live</span>
+                          </>
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleClearCookies}
+                        disabled={savingCookies}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border border-slate-200 text-slate-600 hover:text-rose-700 hover:bg-rose-50 font-semibold text-xs transition cursor-pointer"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        <span>Clear</span>
+                      </button>
+                    </>
+                  )}
+                </div>
+
                 <button
                   type="submit"
                   disabled={savingCookies || !ytCookiesText.trim()}
