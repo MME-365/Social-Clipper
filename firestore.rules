@@ -28,9 +28,10 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
-    // Admin users logged in via Google: customerservice.mme365@gmail.com, marketingmanagementenp.365@gmail.com
+    // Admin users logged in via verified Google Auth: customerservice.mme365@gmail.com, marketingmanagementenp.365@gmail.com
     function isAdmin() {
       return isSignedIn()
+        && request.auth.token.email_verified == true
         && request.auth.token.firebase.sign_in_provider == 'google.com'
         && (
           request.auth.token.email == 'customerservice.mme365@gmail.com'
@@ -58,6 +59,31 @@ service cloud.firestore {
         && (!('authProvider' in data) || data.authProvider in ['google', 'local', 'password']);
     }
 
+    function isValidYouTubeEngineConfig(data) {
+      return data.keys().hasAll(['updatedAt', 'updatedBy'])
+        && data.keys().hasOnly([
+          'updatedAt',
+          'updatedBy',
+          'extractorProvider',
+          'extractorUrl',
+          'extractorApiKey',
+          'extractorHostHeader',
+          'proxyUrl',
+          'cookiesTxt',
+          'oauthCredentials'
+        ])
+        && data.updatedAt == request.time
+        && data.updatedBy is string && data.updatedBy.size() > 0 && data.updatedBy.size() <= 256
+        && data.updatedBy.lower() == request.auth.token.email.lower()
+        && (!('extractorProvider' in data) || (data.extractorProvider is string && data.extractorProvider.size() <= 64 && data.extractorProvider in ['none', 'cobalt', 'rapidapi_yt_media', 'custom_json']))
+        && (!('extractorUrl' in data) || (data.extractorUrl is string && data.extractorUrl.size() <= 1024))
+        && (!('extractorApiKey' in data) || (data.extractorApiKey is string && data.extractorApiKey.size() <= 1024))
+        && (!('extractorHostHeader' in data) || (data.extractorHostHeader is string && data.extractorHostHeader.size() <= 256))
+        && (!('proxyUrl' in data) || (data.proxyUrl is string && data.proxyUrl.size() <= 1024))
+        && (!('cookiesTxt' in data) || (data.cookiesTxt is string && data.cookiesTxt.size() <= 200000))
+        && (!('oauthCredentials' in data) || (data.oauthCredentials is map && data.oauthCredentials.size() <= 20));
+    }
+
     match /users/{userId} {
       allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
       allow list: if (isSignedIn() && resource.data.id == request.auth.uid) || isAdmin();
@@ -66,6 +92,25 @@ service cloud.firestore {
         && incoming().id == existing().id
         && incoming().email == existing().email;
       allow delete: if isValidId(userId) && (isOwner(userId) || isAdmin());
+    }
+
+    match /system_config/{configId} {
+      allow get: if isValidId(configId) && configId == 'youtube_engine' && isAdmin();
+      allow list: if false;
+      allow create: if isValidId(configId) && configId == 'youtube_engine' && isAdmin() && isValidYouTubeEngineConfig(incoming());
+      allow update: if isValidId(configId) && configId == 'youtube_engine' && isAdmin() && isValidYouTubeEngineConfig(incoming())
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'updatedAt',
+          'updatedBy',
+          'extractorProvider',
+          'extractorUrl',
+          'extractorApiKey',
+          'extractorHostHeader',
+          'proxyUrl',
+          'cookiesTxt',
+          'oauthCredentials'
+        ]);
+      allow delete: if isValidId(configId) && configId == 'youtube_engine' && isAdmin();
     }
   }
 }

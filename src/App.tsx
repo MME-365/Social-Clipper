@@ -38,8 +38,8 @@ import { SourceUploadModal } from "./components/SourceUploadModal";
 import { VideoClip, AspectRatioType, SaaSUser, PlanConfig, PayPalSettings, AdminOverview, KaraokeConfig, LogoWatermarkConfig, OneTimePack, DEFAULT_ONE_TIME_PACKS, CreatorToolAd, DEFAULT_CREATOR_TOOL_ADS } from "./types";
 import { KaraokeOverlay } from "./components/KaraokeOverlay";
 import { drawKaraokeSubtitles, drawBurntInLogo } from "./utils/karaokeRenderer";
-import { onAuthStateChanged, signOut } from "firebase/auth";
-import { auth, testFirestoreConnection } from "./firebase";
+import { onAuthStateChanged, signOut, User as FirebaseUser } from "firebase/auth";
+import { auth, testFirestoreConnection, loadYouTubeEngineFromFirestore, saveYouTubeEngineToFirestore } from "./firebase";
 
 export default function App() {
   // Navigation View: Home page is Pricing/Landing, Dashboard accessible from Home, Studio accessible from Dashboard
@@ -316,6 +316,52 @@ export default function App() {
     fetchSaasData();
   };
 
+  const syncYouTubeEngineWithFirestore = async (fbUser: FirebaseUser) => {
+    try {
+      const email = (fbUser.email || "").trim().toLowerCase();
+      const isGoogle = fbUser.providerData?.some((p) => p.providerId === "google.com");
+      const isAdminEmail = email === "customerservice.mme365@gmail.com" || email === "marketingmanagementenp.365@gmail.com";
+      if (!isAdminEmail || !isGoogle || !fbUser.emailVerified) return;
+
+      const [statusRes, fsConfig] = await Promise.all([
+        fetch("/api/youtube-engine-status").then((r) => r.json()).catch(() => null),
+        loadYouTubeEngineFromFirestore().catch(() => null)
+      ]);
+
+      const idToken = await fbUser.getIdToken();
+      const hasFirestoreData = Boolean(
+        fsConfig &&
+        (fsConfig.oauthCredentials ||
+          fsConfig.proxyUrl ||
+          fsConfig.cookiesTxt ||
+          (fsConfig.extractorProvider && fsConfig.extractorProvider !== "none" && fsConfig.extractorUrl))
+      );
+
+      if (hasFirestoreData && statusRes && !statusRes.connected) {
+        await fetch("/api/saas/admin/youtube-engine/hydrate", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${idToken}`
+          },
+          body: JSON.stringify(fsConfig)
+        });
+      } else if (!hasFirestoreData && statusRes?.connected) {
+        const expRes = await fetch("/api/saas/admin/youtube-engine/export", {
+          headers: { "Authorization": `Bearer ${idToken}` }
+        });
+        if (expRes.ok) {
+          const expData = await expRes.json();
+          if (expData?.config) {
+            await saveYouTubeEngineToFirestore(expData.config);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("YouTube engine Firestore sync notice:", e);
+    }
+  };
+
   useEffect(() => {
     // Validate Firestore connection on boot (CRITICAL requirement from Firebase skill)
     testFirestoreConnection();
@@ -335,6 +381,7 @@ export default function App() {
     const unsubscribe = onAuthStateChanged(auth, (fbUser) => {
       if (fbUser && fbUser.email) {
         fetchSaasData(fbUser.email);
+        syncYouTubeEngineWithFirestore(fbUser);
       }
     });
 
@@ -380,12 +427,28 @@ export default function App() {
     }, 2500);
   };
 
-  const handleYoutubeEngineConnected = () => {
+  const handleYoutubeEngineConnected = async () => {
     const targetPending = pendingExportClipIndex;
     setPendingExportClipIndex(null);
     setSourceUploadModalOpen(false);
-    setDownloadSuccessMsg("🎉 YouTube Cloud Engine connected! Downloading stream automatically now...");
+    setDownloadSuccessMsg("🎉 YouTube Cloud Engine connected & saved! Downloading stream automatically now...");
     setTimeout(() => setDownloadSuccessMsg(null), 6000);
+
+    // Backup newly connected OAuth credentials to Firestore so container restarts preserve it
+    try {
+      if (auth.currentUser) {
+        const idToken = await auth.currentUser.getIdToken();
+        const expRes = await fetch("/api/saas/admin/youtube-engine/export", {
+          headers: { "Authorization": `Bearer ${idToken}` }
+        });
+        if (expRes.ok) {
+          const expData = await expRes.json();
+          if (expData?.config) {
+            await saveYouTubeEngineToFirestore(expData.config);
+          }
+        }
+      }
+    } catch (e) {}
 
     if (youtubeId) {
       setYtCacheStatus({ status: "downloading", progress: 15, message: "Syncing authenticated YouTube HD stream..." });

@@ -67,12 +67,69 @@
         }
       },
       "required": ["id", "email", "name", "tier", "downloadsUsed", "downloadsLimit"]
+    },
+    "YouTubeEngineConfig": {
+      "title": "YouTubeEngineConfig",
+      "description": "Persistent admin-only configuration for automated YouTube stream extraction, OAuth device session, residential proxy, and cookies",
+      "type": "object",
+      "properties": {
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when config was last saved"
+        },
+        "updatedBy": {
+          "type": "string",
+          "description": "Verified Google email of admin who updated the config",
+          "maxLength": 256
+        },
+        "extractorProvider": {
+          "type": "string",
+          "description": "External YouTube extraction API provider type",
+          "enum": ["none", "cobalt", "rapidapi_yt_media", "custom_json"],
+          "maxLength": 64
+        },
+        "extractorUrl": {
+          "type": "string",
+          "description": "Base endpoint URL for external extraction API",
+          "maxLength": 1024
+        },
+        "extractorApiKey": {
+          "type": "string",
+          "description": "API key for external extraction service",
+          "maxLength": 1024
+        },
+        "extractorHostHeader": {
+          "type": "string",
+          "description": "Optional x-rapidapi-host or custom host header",
+          "maxLength": 256
+        },
+        "proxyUrl": {
+          "type": "string",
+          "description": "Optional residential or ISP proxy URL",
+          "maxLength": 1024
+        },
+        "cookiesTxt": {
+          "type": "string",
+          "description": "Optional Netscape format YouTube cookies text",
+          "maxLength": 200000
+        },
+        "oauthCredentials": {
+          "type": "object",
+          "description": "Native map holding YouTube OAuth2 device credentials"
+        }
+      },
+      "required": ["updatedAt", "updatedBy"]
     }
   },
   "firestore": {
     "/users/{userId}": {
       "schema": "User",
       "description": "Collection of private user profiles and subscription stats"
+    },
+    "/system_config/{configId}": {
+      "schema": "YouTubeEngineConfig",
+      "description": "Admin-only system configuration documents (e.g. youtube_engine)"
     }
   }
 }

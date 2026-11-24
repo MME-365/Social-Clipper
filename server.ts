@@ -190,6 +190,109 @@ const downloadsStatus = new Map<string, DownloadState>();
 
 const YT_OAUTH_PATH = path.join(process.cwd(), "data", "yt_oauth.json");
 const YT_PROXY_PATH = path.join(process.cwd(), "data", "yt_proxy.txt");
+const YT_EXTRACTOR_PATH = path.join(process.cwd(), "data", "yt_extractor.json");
+const YT_COOKIES_PATH = path.join(process.cwd(), "data", "cookies.txt");
+
+const YT_ENGINE_ADMIN_EMAILS = new Set([
+  "customerservice.mme365@gmail.com",
+  "marketingmanagementenp.365@gmail.com"
+]);
+
+function getFirebaseApiKey(): string | null {
+  try {
+    const cfgPath = path.join(process.cwd(), "firebase-applet-config.json");
+    if (fs.existsSync(cfgPath)) {
+      const parsed = JSON.parse(fs.readFileSync(cfgPath, "utf8"));
+      return parsed?.apiKey || null;
+    }
+  } catch (e) {}
+  return null;
+}
+
+async function verifyAdminFirebaseToken(req: express.Request): Promise<{ ok: boolean; email?: string; error?: string }> {
+  try {
+    const authHeader = req.headers.authorization || "";
+    const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
+    if (!token) {
+      return { ok: false, error: "Missing Firebase Authorization Bearer token" };
+    }
+    const apiKey = getFirebaseApiKey();
+    if (!apiKey) {
+      return { ok: false, error: "Firebase configuration missing on server" };
+    }
+    const resp = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(apiKey)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ idToken: token })
+    });
+    if (!resp.ok) {
+      return { ok: false, error: "Invalid or expired Firebase ID token" };
+    }
+    const data = await resp.json() as any;
+    const user = data?.users?.[0];
+    const email = (user?.email || "").trim().toLowerCase();
+    const isGoogle = Array.isArray(user?.providerUserInfo)
+      ? user.providerUserInfo.some((p: any) => p.providerId === "google.com")
+      : true;
+    if (!email || user?.emailVerified !== true || !isGoogle || !YT_ENGINE_ADMIN_EMAILS.has(email)) {
+      return { ok: false, error: "Verified Admin Google account required" };
+    }
+    return { ok: true, email };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Token verification failed" };
+  }
+}
+
+export interface ExtractorConfig {
+  provider: "none" | "cobalt" | "rapidapi_yt_media" | "custom_json";
+  extractorUrl: string;
+  extractorApiKey: string;
+  extractorHostHeader?: string;
+}
+
+function getSavedExtractorConfig(): ExtractorConfig | null {
+  try {
+    if (fs.existsSync(YT_EXTRACTOR_PATH)) {
+      const parsed = JSON.parse(fs.readFileSync(YT_EXTRACTOR_PATH, "utf8"));
+      if (parsed && parsed.provider && parsed.provider !== "none" && parsed.extractorUrl) {
+        return parsed as ExtractorConfig;
+      }
+    }
+  } catch (e) {}
+  return null;
+}
+
+function loadYouTubeEngineFromEnv() {
+  try {
+    const dataDir = path.join(process.cwd(), "data");
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+    if (process.env.YT_EXTRACTOR_URL && !fs.existsSync(YT_EXTRACTOR_PATH)) {
+      const cfg: ExtractorConfig = {
+        provider: (process.env.YT_EXTRACTOR_PROVIDER as any) || "cobalt",
+        extractorUrl: process.env.YT_EXTRACTOR_URL.trim(),
+        extractorApiKey: (process.env.YT_EXTRACTOR_API_KEY || "").trim(),
+        extractorHostHeader: (process.env.YT_EXTRACTOR_HOST || "").trim()
+      };
+      fs.writeFileSync(YT_EXTRACTOR_PATH, JSON.stringify(cfg, null, 2), "utf8");
+    }
+    if (process.env.YT_PROXY_URL && !fs.existsSync(YT_PROXY_PATH)) {
+      fs.writeFileSync(YT_PROXY_PATH, process.env.YT_PROXY_URL.trim(), "utf8");
+    }
+    if (process.env.YT_OAUTH_CREDENTIALS_JSON && !fs.existsSync(YT_OAUTH_PATH)) {
+      const parsed = JSON.parse(process.env.YT_OAUTH_CREDENTIALS_JSON);
+      fs.writeFileSync(YT_OAUTH_PATH, JSON.stringify(parsed, null, 2), "utf8");
+    }
+    if (process.env.YT_COOKIES_TXT && !fs.existsSync(YT_COOKIES_PATH)) {
+      fs.writeFileSync(YT_COOKIES_PATH, process.env.YT_COOKIES_TXT, "utf8");
+    }
+  } catch (e) {
+    console.warn("YouTube env bootstrap notice:", e);
+  }
+}
+
+loadYouTubeEngineFromEnv();
 
 let pendingOAuthState: {
   userCode: string;
@@ -205,6 +308,185 @@ function getSavedProxyUrl(): string | null {
     }
   } catch (e) {}
   return null;
+}
+
+async function resolveViaExternalExtractor(videoId: string): Promise<{
+  videoUrl: string;
+  audioUrl?: string;
+  title?: string;
+} | null> {
+  const cfg = getSavedExtractorConfig();
+  if (!cfg || cfg.provider === "none" || !cfg.extractorUrl) return null;
+
+  const watchUrl = `https://www.youtube.com/watch?v=${videoId}`;
+
+  if (cfg.provider === "cobalt") {
+    const headers: Record<string, string> = {
+      "Accept": "application/json",
+      "Content-Type": "application/json",
+      "User-Agent": "SocialClipper/1.0"
+    };
+    if (cfg.extractorApiKey) {
+      headers["Authorization"] = cfg.extractorApiKey.startsWith("Api-Key ") || cfg.extractorApiKey.startsWith("Bearer ")
+        ? cfg.extractorApiKey
+        : `Api-Key ${cfg.extractorApiKey}`;
+    }
+    const resp = await fetch(cfg.extractorUrl, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        url: watchUrl,
+        videoQuality: "1080",
+        filenameStyle: "basic",
+        youtubeVideoCodec: "h264"
+      })
+    });
+    if (!resp.ok) {
+      throw new Error(`Cobalt API HTTP ${resp.status}: ${await resp.text().catch(() => "")}`);
+    }
+    const data = await resp.json() as any;
+    if (data?.status === "error") {
+      throw new Error(data?.error?.code || data?.text || "Cobalt extraction error");
+    }
+    if (data?.url) {
+      return { videoUrl: data.url, title: data.filename };
+    }
+    if (Array.isArray(data?.picker) && data.picker.length > 0) {
+      const vidPick = data.picker.find((p: any) => p.type === "video" && p.url) || data.picker[0];
+      if (vidPick?.url) return { videoUrl: vidPick.url };
+    }
+    throw new Error("Cobalt returned no downloadable media URL");
+  }
+
+  if (cfg.provider === "rapidapi_yt_media") {
+    let targetUrl = cfg.extractorUrl;
+    if (targetUrl.includes("{videoId}") || targetUrl.includes("{url}")) {
+      targetUrl = targetUrl
+        .replace(/\{videoId\}/g, encodeURIComponent(videoId))
+        .replace(/\{url\}/g, encodeURIComponent(watchUrl));
+    } else if (!targetUrl.includes("videoId=") && !targetUrl.includes("url=")) {
+      const sep = targetUrl.includes("?") ? "&" : "?";
+      targetUrl = `${targetUrl}${sep}videoId=${encodeURIComponent(videoId)}`;
+    }
+    const hostHeader = cfg.extractorHostHeader || new URL(targetUrl).hostname;
+    const resp = await fetch(targetUrl, {
+      method: "GET",
+      headers: {
+        "x-rapidapi-key": cfg.extractorApiKey,
+        "x-rapidapi-host": hostHeader,
+        "Accept": "application/json"
+      }
+    });
+    if (!resp.ok) {
+      throw new Error(`RapidAPI HTTP ${resp.status}: ${await resp.text().catch(() => "")}`);
+    }
+    const data = await resp.json() as any;
+    const title = data?.title || data?.videoDetails?.title;
+
+    // 1) Direct URL fields
+    const directUrl = data?.downloadUrl || data?.download_url || data?.url || data?.link || data?.videoUrl;
+    if (typeof directUrl === "string" && directUrl.startsWith("http")) {
+      return { videoUrl: directUrl, audioUrl: data?.audioUrl, title };
+    }
+
+    // 2) youtube-media-downloader schema: videos.items + audios.items
+    const vItems: any[] = Array.isArray(data?.videos?.items) ? data.videos.items : [];
+    const aItems: any[] = Array.isArray(data?.audios?.items) ? data.audios.items : [];
+    if (vItems.length > 0) {
+      const mp4WithAudio = vItems.find((v: any) => v.url && v.hasAudio && (v.extension === "mp4" || !v.extension));
+      const best1080 = vItems
+        .filter((v: any) => v.url && (v.extension === "mp4" || String(v.mimeType || "").includes("mp4")))
+        .sort((a: any, b: any) => (parseInt(b.quality) || b.height || 0) - (parseInt(a.quality) || a.height || 0))
+        .find((v: any) => (parseInt(v.quality) || v.height || 0) <= 1080) || vItems.find((v: any) => v.url);
+
+      if (best1080?.url) {
+        if (best1080.hasAudio) {
+          return { videoUrl: best1080.url, title };
+        }
+        const bestAudio = aItems.find((a: any) => a.url && (a.extension === "m4a" || a.extension === "mp4")) || aItems.find((a: any) => a.url);
+        if (bestAudio?.url) {
+          return { videoUrl: best1080.url, audioUrl: bestAudio.url, title };
+        }
+      }
+      if (mp4WithAudio?.url) {
+        return { videoUrl: mp4WithAudio.url, title };
+      }
+    }
+
+    // 3) Standard adaptive/combined formats array
+    const allFormats: any[] = [
+      ...(Array.isArray(data?.formats) ? data.formats : []),
+      ...(Array.isArray(data?.adaptiveFormats) ? data.adaptiveFormats : []),
+      ...(Array.isArray(data?.streamingData?.formats) ? data.streamingData.formats : []),
+      ...(Array.isArray(data?.streamingData?.adaptiveFormats) ? data.streamingData.adaptiveFormats : [])
+    ].filter((f: any) => f && typeof f.url === "string" && f.url.startsWith("http"));
+
+    if (allFormats.length > 0) {
+      const combined = allFormats.find((f: any) => f.hasVideo !== false && f.hasAudio && String(f.mimeType || "").includes("mp4"));
+      const vOnly = allFormats
+        .filter((f: any) => String(f.mimeType || "").includes("video/mp4") && (!f.height || f.height <= 1080))
+        .sort((a: any, b: any) => (b.height || 0) - (a.height || 0))[0];
+      const aOnly = allFormats.find((f: any) => String(f.mimeType || "").includes("audio/mp4") || String(f.mimeType || "").includes("audio/"));
+      if (vOnly?.url && aOnly?.url) {
+        return { videoUrl: vOnly.url, audioUrl: aOnly.url, title };
+      }
+      if (combined?.url) {
+        return { videoUrl: combined.url, title };
+      }
+    }
+    throw new Error("RapidAPI response contained no MP4 stream URL");
+  }
+
+  // custom_json provider
+  let customUrl = cfg.extractorUrl;
+  const hasPlaceholder = customUrl.includes("{videoId}") || customUrl.includes("{url}");
+  if (hasPlaceholder) {
+    customUrl = customUrl
+      .replace(/\{videoId\}/g, encodeURIComponent(videoId))
+      .replace(/\{url\}/g, encodeURIComponent(watchUrl));
+  }
+  const headers: Record<string, string> = {
+    "Accept": "application/json",
+    "Content-Type": "application/json"
+  };
+  if (cfg.extractorApiKey) {
+    headers["Authorization"] = `Bearer ${cfg.extractorApiKey}`;
+    headers["x-api-key"] = cfg.extractorApiKey;
+  }
+  if (cfg.extractorHostHeader) {
+    headers["x-rapidapi-host"] = cfg.extractorHostHeader;
+  }
+  const resp = await fetch(customUrl, {
+    method: hasPlaceholder ? "GET" : "POST",
+    headers,
+    ...(hasPlaceholder ? {} : { body: JSON.stringify({ videoId, url: watchUrl, quality: "1080" }) })
+  });
+  if (!resp.ok) {
+    throw new Error(`Custom Extractor HTTP ${resp.status}`);
+  }
+  const data = await resp.json() as any;
+  const vUrl = data?.videoUrl || data?.downloadUrl || data?.download_url || data?.url || data?.link;
+  if (typeof vUrl === "string" && vUrl.startsWith("http")) {
+    return { videoUrl: vUrl, audioUrl: data?.audioUrl, title: data?.title };
+  }
+  throw new Error("Custom Extractor returned no stream URL");
+}
+
+async function downloadStreamUrlToFile(streamUrl: string, destPath: string) {
+  const resp = await fetch(streamUrl, {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+    }
+  });
+  if (!resp.ok || !resp.body) {
+    throw new Error(`Stream fetch failed with HTTP ${resp.status}`);
+  }
+  await new Promise<void>((resolve, reject) => {
+    const dest = fs.createWriteStream(destPath);
+    Readable.fromWeb(resp.body as any).pipe(dest);
+    dest.on("finish", () => resolve());
+    dest.on("error", reject);
+  });
 }
 
 async function getAuthenticatedInnertube(): Promise<Innertube | null> {
@@ -249,7 +531,50 @@ async function runBackgroundDownload(videoId: string) {
   state.progress = 12;
   state.message = "Connecting to YouTube high-definition stream...";
 
-  // 0. Engine Zero: Authenticated YouTube OAuth2 Session (Mobile-friendly Device Auth — Zero Bot Checks!)
+  // 0A. Engine 0A: External YouTube Extraction API (Cobalt / RapidAPI / Custom Cloud Extractor — 99%+ Cloud Run Reliability)
+  const extractorCfg = getSavedExtractorConfig();
+  if (extractorCfg) {
+    try {
+      state.progress = 18;
+      state.message = `Extracting 1080p stream via ${extractorCfg.provider} engine...`;
+      const extracted = await resolveViaExternalExtractor(videoId);
+      if (extracted?.videoUrl) {
+        if (extracted.title && !state.title) state.title = extracted.title;
+        state.progress = 42;
+        state.message = "Downloading 1080p source video stream...";
+
+        if (extracted.audioUrl) {
+          const tempV = path.join(DOWNLOADS_DIR, `temp_ext_v_${videoId}.mp4`);
+          const tempA = path.join(DOWNLOADS_DIR, `temp_ext_a_${videoId}.m4a`);
+          await Promise.all([
+            downloadStreamUrlToFile(extracted.videoUrl, tempV),
+            downloadStreamUrlToFile(extracted.audioUrl, tempA)
+          ]);
+          state.progress = 85;
+          state.message = "Muxing 1080p MP4 with FFmpeg...";
+          await execPromise(`ffmpeg -y -i "${tempV}" -i "${tempA}" -c:v copy -c:a aac -movflags +faststart -shortest "${finalPath}"`);
+          try {
+            if (fs.existsSync(tempV)) fs.unlinkSync(tempV);
+            if (fs.existsSync(tempA)) fs.unlinkSync(tempA);
+          } catch (e) {}
+        } else {
+          await downloadStreamUrlToFile(extracted.videoUrl, finalPath);
+        }
+
+        if (fs.existsSync(finalPath) && fs.statSync(finalPath).size > 102400) {
+          state.status = "completed";
+          state.progress = 100;
+          state.message = "Video source ready for 9:16 vertical exports!";
+          state.url = `/downloads/${videoId}.mp4`;
+          return;
+        }
+      }
+    } catch (extErr: any) {
+      console.warn(`External extractor attempt failed for ${videoId}:`, extErr?.message || extErr);
+    }
+  }
+
+  // 0B. Engine 0B: Authenticated YouTube OAuth2 Session (Mobile-friendly Device Auth — Zero Bot Checks!)
   if (fs.existsSync(YT_OAUTH_PATH)) {
     try {
       state.progress = 20;
@@ -1318,18 +1643,214 @@ app.post("/api/saas/admin/test-youtube-cookies", async (req, res) => {
   }
 });
 
-// YouTube Mobile-Friendly Device OAuth2 Endpoints
+// YouTube Engine Status & Persistence Endpoints
 app.get("/api/youtube-engine-status", (req, res) => {
   const cookiesPath = path.join(process.cwd(), "data", "cookies.txt");
   const hasCookies = fs.existsSync(cookiesPath) && fs.statSync(cookiesPath).size > 10;
   const hasOAuth = fs.existsSync(YT_OAUTH_PATH);
   const hasProxy = Boolean(getSavedProxyUrl());
+  const extractorCfg = getSavedExtractorConfig();
+  const hasExtractor = Boolean(extractorCfg);
   res.json({
-    connected: hasOAuth || hasCookies || hasProxy,
+    connected: hasExtractor || hasOAuth || hasCookies || hasProxy,
+    hasExtractor,
+    extractorProvider: extractorCfg?.provider || "none",
     hasOAuth,
     hasCookies,
     hasProxy
   });
+});
+
+// External Extraction API Config Endpoints
+app.get("/api/saas/admin/youtube-extractor", (req, res) => {
+  const cfg = getSavedExtractorConfig();
+  if (!cfg) {
+    return res.json({
+      configured: false,
+      provider: "none",
+      extractorUrl: "",
+      hasApiKey: false,
+      extractorHostHeader: ""
+    });
+  }
+  res.json({
+    configured: true,
+    provider: cfg.provider,
+    extractorUrl: cfg.extractorUrl,
+    hasApiKey: Boolean(cfg.extractorApiKey),
+    extractorHostHeader: cfg.extractorHostHeader || ""
+  });
+});
+
+app.post("/api/saas/admin/youtube-extractor", (req, res) => {
+  try {
+    const dataDir = path.join(process.cwd(), "data");
+    if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+
+    const provider = req.body?.provider || "none";
+    const extractorUrl = (req.body?.extractorUrl || "").trim();
+    const rawApiKey = (req.body?.extractorApiKey || "").trim();
+    const extractorHostHeader = (req.body?.extractorHostHeader || "").trim();
+
+    if (provider === "none" || !extractorUrl) {
+      if (fs.existsSync(YT_EXTRACTOR_PATH)) fs.unlinkSync(YT_EXTRACTOR_PATH);
+      return res.json({
+        success: true,
+        configured: false,
+        provider: "none",
+        message: "External Extraction API cleared."
+      });
+    }
+
+    const existing = getSavedExtractorConfig();
+    const finalApiKey = rawApiKey || existing?.extractorApiKey || "";
+    const cfg: ExtractorConfig = {
+      provider,
+      extractorUrl,
+      extractorApiKey: finalApiKey,
+      extractorHostHeader
+    };
+    fs.writeFileSync(YT_EXTRACTOR_PATH, JSON.stringify(cfg, null, 2), "utf8");
+
+    for (const [id, st] of downloadsStatus.entries()) {
+      if (st.status === "failed") downloadsStatus.delete(id);
+    }
+
+    res.json({
+      success: true,
+      configured: true,
+      provider: cfg.provider,
+      extractorUrl: cfg.extractorUrl,
+      hasApiKey: Boolean(cfg.extractorApiKey),
+      extractorHostHeader: cfg.extractorHostHeader || "",
+      message: `External Extractor (${cfg.provider}) saved and activated!`
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to save extractor config" });
+  }
+});
+
+app.post("/api/saas/admin/youtube-extractor/test", async (req, res) => {
+  try {
+    const cfg = getSavedExtractorConfig();
+    if (!cfg) {
+      return res.json({
+        success: true,
+        working: false,
+        message: "Save an External Extractor API URL first before testing."
+      });
+    }
+    const testId = (req.body?.videoId || "fLexgOxsZu0").trim();
+    const extracted = await resolveViaExternalExtractor(testId);
+    if (!extracted?.videoUrl) {
+      return res.json({
+        success: true,
+        working: false,
+        message: "Extractor responded, but did not return a valid video stream URL."
+      });
+    }
+    const probe = await fetch(extracted.videoUrl, {
+      method: "GET",
+      headers: { Range: "bytes=0-1023" }
+    });
+    if (!probe.ok && probe.status !== 206) {
+      return res.json({
+        success: true,
+        working: false,
+        message: `Resolved stream URL returned HTTP ${probe.status}. Check API provider/proxy settings.`
+      });
+    }
+    res.json({
+      success: true,
+      working: true,
+      message: `Verified (${cfg.provider})! Live MP4 stream resolved${extracted.title ? ` for "${extracted.title}"` : ""} and ready for automatic 9:16 downloads.`
+    });
+  } catch (err: any) {
+    res.json({
+      success: true,
+      working: false,
+      message: `Extractor test failed: ${err?.message || "Connection error"}`
+    });
+  }
+});
+
+// Admin Firestore Sync: Export full server engine config (Verified Admin Google ID Token required)
+app.get("/api/saas/admin/youtube-engine/export", async (req, res) => {
+  const authCheck = await verifyAdminFirebaseToken(req);
+  if (!authCheck.ok) {
+    return res.status(403).json({ error: authCheck.error || "Forbidden" });
+  }
+  const extractor = getSavedExtractorConfig();
+  const proxyUrl = getSavedProxyUrl() || "";
+  const cookiesTxt = fs.existsSync(YT_COOKIES_PATH) ? fs.readFileSync(YT_COOKIES_PATH, "utf8") : "";
+  let oauthCredentials: Record<string, any> | null = null;
+  try {
+    if (fs.existsSync(YT_OAUTH_PATH)) {
+      oauthCredentials = JSON.parse(fs.readFileSync(YT_OAUTH_PATH, "utf8"));
+    }
+  } catch (e) {}
+  res.json({
+    success: true,
+    config: {
+      extractorProvider: extractor?.provider || "none",
+      extractorUrl: extractor?.extractorUrl || "",
+      extractorApiKey: extractor?.extractorApiKey || "",
+      extractorHostHeader: extractor?.extractorHostHeader || "",
+      proxyUrl,
+      cookiesTxt,
+      oauthCredentials
+    }
+  });
+});
+
+// Admin Firestore Sync: Hydrate server engine config from Firestore after container restart (Verified Admin Google ID Token required)
+app.post("/api/saas/admin/youtube-engine/hydrate", express.json({ limit: "2mb" }), async (req, res) => {
+  const authCheck = await verifyAdminFirebaseToken(req);
+  if (!authCheck.ok) {
+    return res.status(403).json({ error: authCheck.error || "Forbidden" });
+  }
+  try {
+    const dataDir = path.join(process.cwd(), "data");
+    if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+
+    const cfg = req.body || {};
+    let hydratedCount = 0;
+
+    if (cfg.extractorProvider && cfg.extractorProvider !== "none" && cfg.extractorUrl) {
+      const extObj: ExtractorConfig = {
+        provider: cfg.extractorProvider,
+        extractorUrl: String(cfg.extractorUrl).trim(),
+        extractorApiKey: String(cfg.extractorApiKey || "").trim(),
+        extractorHostHeader: String(cfg.extractorHostHeader || "").trim()
+      };
+      fs.writeFileSync(YT_EXTRACTOR_PATH, JSON.stringify(extObj, null, 2), "utf8");
+      hydratedCount++;
+    }
+    if (typeof cfg.proxyUrl === "string" && cfg.proxyUrl.trim()) {
+      fs.writeFileSync(YT_PROXY_PATH, cfg.proxyUrl.trim(), "utf8");
+      hydratedCount++;
+    }
+    if (typeof cfg.cookiesTxt === "string" && cfg.cookiesTxt.trim().length > 10) {
+      fs.writeFileSync(YT_COOKIES_PATH, cfg.cookiesTxt, "utf8");
+      hydratedCount++;
+    }
+    if (cfg.oauthCredentials && typeof cfg.oauthCredentials === "object") {
+      fs.writeFileSync(YT_OAUTH_PATH, JSON.stringify(cfg.oauthCredentials, null, 2), "utf8");
+      hydratedCount++;
+    }
+
+    for (const [id, st] of downloadsStatus.entries()) {
+      if (st.status === "failed") downloadsStatus.delete(id);
+    }
+
+    res.json({
+      success: true,
+      hydratedCount,
+      message: hydratedCount > 0 ? "YouTube Engine restored from Firestore!" : "No saved engine fields in Firestore."
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to hydrate YouTube engine" });
+  }
 });
 
 app.get("/api/saas/admin/youtube-oauth/status", (req, res) => {

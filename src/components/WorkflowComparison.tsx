@@ -198,9 +198,6 @@ export function WorkflowComparison({ onOpenStudio, onOpenPricing }: WorkflowComp
                     <span className="inline-flex items-center text-[10px] sm:text-[11px] font-semibold text-emerald-700 bg-emerald-50/70 border border-emerald-100 px-2 py-0.5 rounded-md shrink-0">
                       5 ready 9:16 clips
                     </span>
-                    <span className="inline-flex items-center text-[10px] sm:text-[11px] font-bold text-emerald-800 bg-emerald-100/70 border border-emerald-200/60 px-2 py-0.5 rounded-md shrink-0">
-                      ⚡ 90 seconds
-                    </span>
                   </div>
                 </div>
               </div>

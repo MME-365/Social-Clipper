@@ -28,8 +28,15 @@ import {
   Activity,
   ArrowUpDown,
   Key,
-  Upload
+  Upload,
+  Cloud,
+  Server
 } from "lucide-react";
+import {
+  auth,
+  loadYouTubeEngineFromFirestore,
+  saveYouTubeEngineToFirestore
+} from "../firebase";
 import {
   AdminOverview,
   PlanConfig,
@@ -159,6 +166,43 @@ export function AdminPanel({
   const [hasYtProxy, setHasYtProxy] = useState(false);
   const [savingProxy, setSavingProxy] = useState(false);
 
+  const [extractorProvider, setExtractorProvider] = useState<"none" | "cobalt" | "rapidapi_yt_media" | "custom_json">("none");
+  const [extractorUrl, setExtractorUrl] = useState("");
+  const [extractorApiKey, setExtractorApiKey] = useState("");
+  const [extractorHostHeader, setExtractorHostHeader] = useState("");
+  const [hasExtractor, setHasExtractor] = useState(false);
+  const [hasExtractorApiKey, setHasExtractorApiKey] = useState(false);
+  const [savingExtractor, setSavingExtractor] = useState(false);
+  const [testingExtractor, setTestingExtractor] = useState(false);
+  const [extractorTestResult, setExtractorTestResult] = useState<{ working: boolean; message: string } | null>(null);
+  const [firestoreSynced, setFirestoreSynced] = useState(false);
+  const [syncingFirestore, setSyncingFirestore] = useState(false);
+
+  const syncEngineToFirestore = async (overrides?: { oauthCredentials?: Record<string, any> | null; proxyUrl?: string; cookiesTxt?: string }) => {
+    try {
+      if (!auth.currentUser) return;
+      setSyncingFirestore(true);
+      const idToken = await auth.currentUser.getIdToken();
+      const expRes = await fetch("/api/saas/admin/youtube-engine/export", {
+        headers: { "Authorization": `Bearer ${idToken}` }
+      });
+      if (expRes.ok) {
+        const expData = await expRes.json();
+        if (expData?.config) {
+          await saveYouTubeEngineToFirestore({
+            ...expData.config,
+            ...(overrides || {})
+          });
+          setFirestoreSynced(true);
+        }
+      }
+    } catch (e) {
+      console.warn("Firestore backup notice:", e);
+    } finally {
+      setSyncingFirestore(false);
+    }
+  };
+
   useEffect(() => {
     fetch("/api/saas/admin/youtube-cookies")
       .then((r) => r.json())
@@ -183,6 +227,25 @@ export function AdminPanel({
       .then((r) => r.json())
       .then((d) => setHasYtProxy(Boolean(d.hasProxy)))
       .catch(() => {});
+
+    fetch("/api/saas/admin/youtube-extractor")
+      .then((r) => r.json())
+      .then((d) => {
+        setHasExtractor(Boolean(d.configured));
+        setExtractorProvider(d.provider || "none");
+        setExtractorUrl(d.extractorUrl || "");
+        setHasExtractorApiKey(Boolean(d.hasApiKey));
+        setExtractorHostHeader(d.extractorHostHeader || "");
+      })
+      .catch(() => {});
+
+    loadYouTubeEngineFromFirestore()
+      .then((fsCfg) => {
+        if (fsCfg) {
+          setFirestoreSynced(true);
+        }
+      })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -194,7 +257,8 @@ export function AdminPanel({
         if (data.connected) {
           setYtOAuthConnected(true);
           setYtOAuthCode(null);
-          showToast("YouTube Cloud Engine connected! All YouTube URLs now extract & download in 9:16 automatically.");
+          await syncEngineToFirestore();
+          showToast("YouTube Cloud Engine connected & saved to Firestore! All YouTube URLs now extract automatically.");
           clearInterval(timer);
         }
       } catch {}
@@ -624,7 +688,8 @@ export function AdminPanel({
       if (res.ok && data.success) {
         setHasYtCookies(Boolean(data.hasCookies));
         setCookieCount(Number(data.cookieLineCount) || 0);
-        showToast(data.message || "YouTube cookies saved! yt-dlp will now authenticate with these credentials.");
+        await syncEngineToFirestore({ cookiesTxt: payloadText });
+        showToast(data.message || "YouTube cookies saved & synced to Firestore!");
         setYtCookiesText("");
       } else {
         throw new Error(data.error || "Failed to save cookies");
@@ -689,6 +754,7 @@ export function AdminPanel({
         setHasYtCookies(false);
         setCookieCount(0);
         setYtCookiesText("");
+        await syncEngineToFirestore({ cookiesTxt: "" });
         showToast("YouTube cookies cleared.");
       }
     } catch (err: any) {
@@ -721,6 +787,7 @@ export function AdminPanel({
       await fetch("/api/saas/admin/youtube-oauth", { method: "DELETE" });
       setYtOAuthConnected(false);
       setYtOAuthCode(null);
+      await syncEngineToFirestore({ oauthCredentials: null });
       showToast("Disconnected YouTube OAuth session.");
     } catch (err: any) {
       showToast("Failed to disconnect OAuth.", true);
@@ -731,21 +798,84 @@ export function AdminPanel({
     e.preventDefault();
     setSavingProxy(true);
     try {
+      const submittedProxy = ytProxyUrl.trim();
       const res = await fetch("/api/saas/admin/youtube-proxy", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ proxyUrl: ytProxyUrl })
+        body: JSON.stringify({ proxyUrl: submittedProxy })
       });
       const data = await res.json();
       if (res.ok && data.success) {
         setHasYtProxy(Boolean(data.hasProxy));
         setYtProxyUrl("");
-        showToast(data.message || "Proxy updated!");
+        await syncEngineToFirestore({ proxyUrl: submittedProxy });
+        showToast(data.message || "Proxy updated & synced to Firestore!");
       }
     } catch (err: any) {
       showToast("Failed to save proxy URL", true);
     } finally {
       setSavingProxy(false);
+    }
+  };
+
+  const handleSaveExtractor = async (e: FormEvent) => {
+    e.preventDefault();
+    setSavingExtractor(true);
+    setExtractorTestResult(null);
+    try {
+      const res = await fetch("/api/saas/admin/youtube-extractor", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider: extractorProvider,
+          extractorUrl,
+          extractorApiKey,
+          extractorHostHeader
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setHasExtractor(Boolean(data.configured));
+        setHasExtractorApiKey(Boolean(data.hasApiKey));
+        setExtractorApiKey("");
+        await syncEngineToFirestore();
+        showToast(data.message || "External Extractor saved & synced to Firestore!");
+      } else {
+        throw new Error(data.error || "Failed to save extractor config");
+      }
+    } catch (err: any) {
+      showToast(err.message || "Failed to save extractor config", true);
+    } finally {
+      setSavingExtractor(false);
+    }
+  };
+
+  const handleTestExtractor = async () => {
+    setTestingExtractor(true);
+    setExtractorTestResult(null);
+    try {
+      const res = await fetch("/api/saas/admin/youtube-extractor/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ videoId: "fLexgOxsZu0" })
+      });
+      const data = await res.json();
+      setExtractorTestResult({
+        working: Boolean(data.working),
+        message: data.message || "Extractor test finished."
+      });
+      if (data.working) {
+        showToast("External YouTube Extractor verified! Automatic 1080p downloads are active.");
+      } else {
+        showToast(data.message || "Extractor test failed.", true);
+      }
+    } catch (err: any) {
+      setExtractorTestResult({
+        working: false,
+        message: err.message || "Network error testing extractor."
+      });
+    } finally {
+      setTestingExtractor(false);
     }
   };
 
@@ -2098,12 +2228,33 @@ export function AdminPanel({
                   Connect once via mobile/desktop code below so EVERY user who pastes a YouTube URL automatically gets 1080p stream downloads & 9:16 vertical MP4 exports without uploading any file.
                 </p>
               </div>
-              <div className="flex items-center gap-1.5 text-xs shrink-0">
+              <div className="flex flex-wrap items-center gap-2 text-xs shrink-0">
+                <button
+                  type="button"
+                  onClick={() => syncEngineToFirestore()}
+                  disabled={syncingFirestore}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border font-semibold text-[11px] transition cursor-pointer ${
+                    firestoreSynced
+                      ? "bg-sky-50 text-sky-700 border-sky-200"
+                      : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                  }`}
+                  title="Backup YouTube Engine config to Firestore so it persists across server restarts"
+                >
+                  <Cloud className={`h-3.5 w-3.5 ${syncingFirestore ? "animate-pulse" : ""}`} />
+                  <span>{syncingFirestore ? "Syncing..." : firestoreSynced ? "Firestore Synced" : "Sync to Firestore"}</span>
+                </button>
+
                 <span className="font-semibold text-slate-600">Engine:</span>
-                {ytOAuthConnected || hasYtCookies || hasYtProxy ? (
+                {hasExtractor || ytOAuthConnected || hasYtCookies || hasYtProxy ? (
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-[11px]">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                    {ytOAuthConnected ? "OAuth Connected" : hasYtCookies ? `Cookies Active (${cookieCount})` : "Proxy Active"}
+                    {hasExtractor
+                      ? `Extractor (${extractorProvider})`
+                      : ytOAuthConnected
+                      ? "OAuth Connected"
+                      : hasYtCookies
+                      ? `Cookies Active (${cookieCount})`
+                      : "Proxy Active"}
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-50 text-amber-700 border border-amber-200 font-bold text-[11px]">
@@ -2113,6 +2264,142 @@ export function AdminPanel({
                 )}
               </div>
             </div>
+
+            {/* Method 0 (OpusClip-Grade Production Engine): External YouTube Extraction API */}
+            <form onSubmit={handleSaveExtractor} className="bg-linear-to-br from-emerald-50/70 to-teal-50/40 border border-emerald-200 rounded-2xl p-4 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <span className="inline-block text-[10px] font-bold uppercase tracking-wider text-emerald-700 bg-white px-2 py-0.5 rounded-md border border-emerald-200 mb-1">
+                    Production Reliability (99%+ Uptime • Survives Cloud Run Restarts)
+                  </span>
+                  <h5 className="font-bold text-xs sm:text-sm text-slate-900 flex items-center gap-1.5">
+                    <Server className="h-4 w-4 text-emerald-600" />
+                    <span>External YouTube Extraction API (Cobalt / RapidAPI / Custom)</span>
+                  </h5>
+                  <p className="text-[11px] text-slate-600 mt-0.5">
+                    Connect a dedicated extraction API (which handles residential IPs &amp; PO tokens automatically) so any user&apos;s YouTube link downloads and reframes to 9:16 with zero bot checks.
+                  </p>
+                </div>
+                {hasExtractor && (
+                  <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2.5 py-1 rounded-lg border border-emerald-200 self-start sm:self-auto shrink-0">
+                    Active: {extractorProvider}
+                  </span>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-slate-700">Provider Type</label>
+                  <select
+                    value={extractorProvider}
+                    onChange={(e) => setExtractorProvider(e.target.value as any)}
+                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+                  >
+                    <option value="none">Disabled</option>
+                    <option value="cobalt">Cobalt API (v10 JSON Endpoint)</option>
+                    <option value="rapidapi_yt_media">RapidAPI (YouTube Media Downloader)</option>
+                    <option value="custom_json">Custom JSON Extractor API</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-slate-700">
+                    Endpoint URL {extractorProvider === "rapidapi_yt_media" ? "(supports {videoId})" : ""}
+                  </label>
+                  <input
+                    type="url"
+                    value={extractorUrl}
+                    onChange={(e) => setExtractorUrl(e.target.value)}
+                    placeholder={
+                      extractorProvider === "cobalt"
+                        ? "https://your-cobalt-instance.com/"
+                        : extractorProvider === "rapidapi_yt_media"
+                        ? "https://youtube-media-downloader.p.rapidapi.com/v2/video/details"
+                        : "https://api.yourdomain.com/extract?videoId={videoId}"
+                    }
+                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-slate-700">
+                    API Key {hasExtractorApiKey ? "(Saved — leave blank to keep)" : "(Optional for self-hosted)"}
+                  </label>
+                  <input
+                    type="password"
+                    value={extractorApiKey}
+                    onChange={(e) => setExtractorApiKey(e.target.value)}
+                    placeholder={hasExtractorApiKey ? "••••••••••••••••" : "Enter API Key / RapidAPI Key"}
+                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-slate-700">
+                    Host Header (Optional, e.g. RapidAPI host)
+                  </label>
+                  <input
+                    type="text"
+                    value={extractorHostHeader}
+                    onChange={(e) => setExtractorHostHeader(e.target.value)}
+                    placeholder="youtube-media-downloader.p.rapidapi.com"
+                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+
+              {extractorTestResult && (
+                <div
+                  className={`p-3 rounded-xl border text-xs font-medium flex items-start gap-2 ${
+                    extractorTestResult.working
+                      ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                      : "bg-rose-50 border-rose-200 text-rose-800"
+                  }`}
+                >
+                  {extractorTestResult.working ? (
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+                  ) : (
+                    <AlertCircle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
+                  )}
+                  <span>{extractorTestResult.message}</span>
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                {hasExtractor ? (
+                  <button
+                    type="button"
+                    onClick={handleTestExtractor}
+                    disabled={testingExtractor}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition cursor-pointer disabled:opacity-50"
+                  >
+                    {testingExtractor ? (
+                      <>
+                        <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                        <span>Testing Stream...</span>
+                      </>
+                    ) : (
+                      <>
+                        <ShieldCheck className="h-3.5 w-3.5" />
+                        <span>Test Live Extraction</span>
+                      </>
+                    )}
+                  </button>
+                ) : (
+                  <span className="text-[11px] text-slate-500">
+                    Also supports cold-boot Env Vars: <code className="font-mono text-slate-700">YT_EXTRACTOR_URL</code> &amp; <code className="font-mono text-slate-700">YT_EXTRACTOR_API_KEY</code>
+                  </span>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={savingExtractor}
+                  className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs transition cursor-pointer disabled:opacity-50"
+                >
+                  {savingExtractor ? "Saving & Syncing..." : extractorProvider === "none" ? "Disable Extractor" : "Save & Sync Extractor"}
+                </button>
+              </div>
+            </form>
 
             {/* Method 1 (Easiest - Works on Phone or Desktop in 15 Seconds): Device OAuth2 */}
             <div className="bg-linear-to-br from-violet-50 to-indigo-50/60 border border-violet-200 rounded-2xl p-4 space-y-3">
