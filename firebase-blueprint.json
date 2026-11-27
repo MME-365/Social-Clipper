@@ -116,7 +116,11 @@
         },
         "oauthCredentials": {
           "type": "object",
-          "description": "Native map holding YouTube OAuth2 device credentials"
+          "description": "Native map holding primary YouTube OAuth2 device credentials"
+        },
+        "oauthPool": {
+          "type": "array",
+          "description": "Bounded pool of up to 5 YouTube OAuth2 device sessions for automatic failover"
         }
       },
       "required": ["updatedAt", "updatedBy"]

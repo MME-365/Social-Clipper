@@ -293,7 +293,7 @@ export const DEFAULT_CREATOR_TOOL_ADS: CreatorToolAd[] = [
     tagline: "YouTube Music Video to 9:16 Shorts Automation",
     description: "Turn YouTube links into viral 9:16 vertical shorts in seconds. Algorithmic peak detection, animated lyrics, and 4K MP4 export.",
     url: "https://socialclipper.io",
-    logoUrl: "/assets/aistudio/1991_1910e85f.jpg",
+    logoUrl: "/brand-logo.png",
     category: "Video Automation",
     price: 150,
     cycleDays: 30,

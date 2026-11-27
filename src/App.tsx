@@ -35,6 +35,7 @@ import { AuthModal } from "./components/AuthModal";
 import { DownloadReadyModal, DownloadModalData } from "./components/DownloadReadyModal";
 import { CreatorAdModal } from "./components/CreatorAdModal";
 import { SourceUploadModal } from "./components/SourceUploadModal";
+import { BrandLogo } from "./components/BrandLogo";
 import { VideoClip, AspectRatioType, SaaSUser, PlanConfig, PayPalSettings, AdminOverview, KaraokeConfig, LogoWatermarkConfig, OneTimePack, DEFAULT_ONE_TIME_PACKS, CreatorToolAd, DEFAULT_CREATOR_TOOL_ADS } from "./types";
 import { KaraokeOverlay } from "./components/KaraokeOverlay";
 import { drawKaraokeSubtitles, drawBurntInLogo } from "./utils/karaokeRenderer";
@@ -44,6 +45,25 @@ import { auth, testFirestoreConnection, loadYouTubeEngineFromFirestore, saveYouT
 export default function App() {
   // Navigation View: Home page is Pricing/Landing, Dashboard accessible from Home, Studio accessible from Dashboard
   const [currentView, setCurrentView] = useState<"studio" | "landing" | "dashboard" | "admin">("landing");
+
+  // Dynamic Canonical, OpenGraph URL & absolute og:image hydration per route/origin
+  useEffect(() => {
+    const origin = window.location.origin;
+    const canonicalHref = origin + window.location.pathname;
+    const ogImageAbs = `${origin}/og-image.png`;
+
+    const canonicalLink = document.querySelector<HTMLLinkElement>('link[rel="canonical"]');
+    if (canonicalLink) canonicalLink.href = canonicalHref;
+
+    const ogUrl = document.querySelector<HTMLMetaElement>('meta[property="og:url"]');
+    if (ogUrl) ogUrl.content = canonicalHref;
+
+    const ogImg = document.querySelector<HTMLMetaElement>('meta[property="og:image"]');
+    if (ogImg) ogImg.content = ogImageAbs;
+
+    const twImg = document.querySelector<HTMLMetaElement>('meta[name="twitter:image"]');
+    if (twImg) twImg.content = ogImageAbs;
+  }, [currentView]);
 
   // Authentication Modal State
   const [authModalOpen, setAuthModalOpen] = useState(false);
@@ -2151,8 +2171,8 @@ export default function App() {
       />
 
       {/* Clean Footer */}
-      <footer className="border-t border-slate-200/80 bg-white py-4 px-6 text-center text-xs text-slate-500 flex flex-col sm:flex-row items-center justify-between gap-2 max-w-6xl w-full mx-auto">
-        <div>SocialClipper • 9:16 Shorts Automation Platform</div>
+      <footer className="border-t border-slate-200/80 bg-white py-5 px-6 text-xs text-slate-500 flex flex-col sm:flex-row items-center justify-between gap-3 max-w-6xl w-full mx-auto">
+        <BrandLogo size="sm" showTagline />
         <div className="flex items-center gap-4 text-[11px] text-slate-400 font-medium">
           <button onClick={() => setCurrentView("landing")} className="hover:text-slate-700 cursor-pointer">Pricing</button>
           <span>·</span>

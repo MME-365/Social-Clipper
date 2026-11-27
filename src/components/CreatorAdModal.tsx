@@ -15,7 +15,7 @@ const PRESET_LOGOS = [
   { name: "TikTok Appraiser", url: "/assets/aistudio/1994-removebg-preview_05a69973.png" },
   { name: "Rank My Spotify", url: "/assets/aistudio/2001_c6af18b3.jpg" },
   { name: "TollPass Pro", url: "/assets/aistudio/2013-removebg-preview_f5cc8dba.png" },
-  { name: "SocialClipper", url: "/assets/aistudio/1991_1910e85f.jpg" }
+  { name: "SocialClipper", url: "/brand-logo.png" }
 ];
 
 export function CreatorAdModal({

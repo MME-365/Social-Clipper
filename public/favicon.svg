@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="sc-bg" x1="6" y1="4" x2="58" y2="60" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0f172a" />
+      <stop offset="50%" stop-color="#4c1d95" />
+      <stop offset="100%" stop-color="#7c3aed" />
+    </linearGradient>
+    <radialGradient id="sc-glow" cx="50%" cy="6%" r="55%">
+      <stop offset="0%" stop-color="#2dd4bf" stop-opacity="0.7" />
+      <stop offset="100%" stop-color="#2dd4bf" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="url(#sc-bg)" />
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="url(#sc-glow)" />
+  <rect x="2.75" y="2.75" width="58.5" height="58.5" rx="15.25" stroke="rgba(255,255,255,0.2)" stroke-width="1.5" />
+  <path
+    d="M17.5 22.8C17.5 20.6 19.9 19.2 21.8 20.3L34.2 27.5C36.1 28.6 36.1 31.4 34.2 32.5L21.8 39.7C19.9 40.8 17.5 39.4 17.5 37.2V22.8Z"
+    stroke="#ffffff"
+    stroke-width="4.2"
+    stroke-linejoin="round"
+  />
+  <rect x="33.5" y="19" width="4.4" height="22" rx="2.2" fill="#ffffff" />
+  <rect x="40.5" y="13.5" width="4.4" height="33" rx="2.2" fill="#ffffff" />
+  <rect x="47.5" y="21.5" width="4.4" height="17" rx="2.2" fill="#ffffff" />
+</svg>

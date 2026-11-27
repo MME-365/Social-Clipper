@@ -119,9 +119,11 @@ export const SourceUploadModal: React.FC<SourceUploadModalProps> = ({
             <X className="h-5 w-5" />
           </button>
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-2xl bg-violet-600/30 border border-violet-500/40 text-violet-400">
-              <Film className="h-6 w-6" />
-            </div>
+            <img
+              src="/brand-logo.png"
+              alt="SocialClipper logo"
+              className="h-11 w-11 rounded-2xl shrink-0 ring-1 ring-white/20 shadow-sm"
+            />
             <div>
               <h3 className="text-lg font-bold font-display text-white">YouTube Stream Access Required</h3>
               <p className="text-xs text-slate-400 mt-0.5">

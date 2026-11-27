@@ -19,6 +19,7 @@ import {
   LogIn
 } from "lucide-react";
 import { SaaSUser } from "../types";
+import { BrandLogo } from "./BrandLogo";
 
 export const ADMIN_EMAILS = [
   "customerservice.mme365@gmail.com",
@@ -79,23 +80,14 @@ export function Header({
     <header className="border-b border-slate-200/80 bg-white/95 backdrop-blur-sm px-4 sm:px-6 py-3 sticky top-0 z-40">
       <div className="max-w-6xl mx-auto flex items-center justify-between gap-4">
         {/* Brand Logo - Pricing is Home */}
-        <div
+        <button
+          type="button"
           onClick={() => onNavigate("landing")}
-          className="flex items-center gap-2.5 cursor-pointer select-none group"
+          className="cursor-pointer group text-left rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
           title="Go to Home / Pricing"
         >
-          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-violet-600 text-white shadow-xs group-hover:bg-violet-700 transition">
-            <Film className="h-4 w-4" />
-          </div>
-          <div>
-            <h1 className="font-display text-base font-bold tracking-tight text-slate-900 leading-none">
-              Social<span className="text-violet-600 font-extrabold">Clipper</span>
-            </h1>
-            <p className="text-[10px] text-slate-400 hidden sm:block mt-0.5">
-              YouTube to 9:16 Shorts
-            </p>
-          </div>
-        </div>
+          <BrandLogo size="md" className="group-hover:opacity-95 transition" />
+        </button>
 
         {/* Center Breadcrumbs / Contextual Navigation */}
         <div className="hidden md:flex items-center gap-1.5 text-xs font-semibold text-slate-600">

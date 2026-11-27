@@ -2019,7 +2019,18 @@ async function setupServer() {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
+      const indexPath = path.join(distPath, 'index.html');
+      const appUrl = (process.env.APP_URL || "").replace(/\/+$/, "");
+      if (appUrl && fs.existsSync(indexPath)) {
+        const html = fs
+          .readFileSync(indexPath, "utf8")
+          .replace('<link rel="canonical" href="/" />', `<link rel="canonical" href="${appUrl}/" />`)
+          .replace('<meta property="og:url" content="/" />', `<meta property="og:url" content="${appUrl}/" />`)
+          .replace('<meta property="og:image" content="/og-image.png" />', `<meta property="og:image" content="${appUrl}/og-image.png" />`)
+          .replace('<meta name="twitter:image" content="/og-image.png" />', `<meta name="twitter:image" content="${appUrl}/og-image.png" />`);
+        return res.type("html").send(html);
+      }
+      res.sendFile(indexPath);
     });
   }
 }

@@ -76,12 +76,34 @@ export function LandingPage({
         </div>
 
         {/* Quiet social proof */}
-        <div className="pt-4 flex items-center justify-center gap-6 text-xs text-slate-500">
+        <div className="pt-4 flex flex-wrap items-center justify-center gap-4 sm:gap-6 text-xs text-slate-500">
           <span>⚡ Instant 9:16 Resizing</span>
           <span aria-hidden="true">·</span>
           <span>🎵 Full Audio & 4K Quality</span>
           <span aria-hidden="true">·</span>
           <span>📱 TikTok, Reels & Shorts 1-Click Share</span>
+        </div>
+
+        {/* Brand Visual Hero Carrier */}
+        <div className="pt-4 max-w-4xl mx-auto">
+          <div className="relative rounded-2xl sm:rounded-3xl overflow-hidden border border-slate-200/90 bg-slate-950 shadow-xl shadow-violet-950/10">
+            <img
+              src="/og-image.png"
+              alt="SocialClipper studio converting music waveform into three glowing 9:16 vertical short-form clips"
+              className="w-full aspect-16/9 object-cover block"
+            />
+            <div className="bg-slate-950/90 border-t border-white/10 px-4 sm:px-6 py-3 flex flex-col sm:flex-row items-center justify-between gap-2 text-left">
+              <div className="flex items-center gap-2.5">
+                <img src="/brand-logo.png" alt="SocialClipper icon" className="h-6 w-6 rounded-md shrink-0" />
+                <span className="text-xs font-semibold text-white tracking-tight">
+                  Music Video Social Clipper Studio
+                </span>
+              </div>
+              <span className="text-[11px] font-mono text-slate-400">
+                16:9 Widescreen Source → 5 Ready 9:16 Vertical Shorts
+              </span>
+            </div>
+          </div>
         </div>
       </section>
 

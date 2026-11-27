@@ -1,5 +1,6 @@
 import { useState, FormEvent, useEffect } from "react";
-import { X, Lock, Mail, User, AlertCircle, Sparkles, ArrowRight } from "lucide-react";
+import { X, Lock, Mail, User, AlertCircle, ArrowRight } from "lucide-react";
+import { BrandMark } from "./BrandLogo";
 import { 
   signInWithPopup, 
   signInWithEmailAndPassword, 
@@ -209,8 +210,8 @@ export function AuthModal({
             <X className="h-5 w-5" />
           </button>
 
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 text-white text-xs font-semibold mb-2">
-            <Sparkles className="h-3.5 w-3.5 text-amber-300" />
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/15 border border-white/20 text-white text-xs font-semibold mb-3">
+            <BrandMark size="xs" />
             <span>SocialClipper Account</span>
           </div>
 
